@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app import models  # noqa: F401  (register tables on Base)
 from app.config import get_settings
 from app.db import Base, engine
-from app.routers import meta
+from app.routers import auth, meta
 
 log = logging.getLogger("classquest")
 
@@ -44,6 +44,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     app.include_router(meta.router)
+    app.include_router(auth.router)
     return app
 
 
