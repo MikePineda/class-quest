@@ -5,6 +5,7 @@ import { DemoExperience } from './demo/DemoExperience'
 import { AuthScreen } from './foundation/AuthScreen'
 import { ProfileScreen } from './foundation/ProfileScreen'
 import { ServerHub } from './foundation/ServerHub'
+import { Brand } from './foundation/Brand'
 
 type Screen = 'profile' | 'servers'
 
@@ -45,7 +46,7 @@ function FoundationApp() {
   }
 
   if (checkingSession) {
-    return <main className="grid min-h-screen place-items-center bg-app-grid"><div className="text-center"><span className="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-primary font-black text-background">CQ</span><p className="mt-4 text-sm font-semibold text-ink-muted">Restoring your session…</p></div></main>
+    return <main className="grid min-h-screen place-items-center bg-app-grid"><div className="text-center"><Brand /><p className="mt-5 font-hud text-[10px] tracking-[0.1em] text-secondary">RESTORING YOUR JOURNEY…</p></div></main>
   }
 
   if (!user) return <AuthScreen onAuthenticated={authenticated} />

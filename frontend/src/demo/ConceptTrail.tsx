@@ -11,11 +11,11 @@ export function ConceptTrail({ graph, activeConceptId, recovered }: ConceptTrail
   const foundations = new Set(activeConcept?.prerequisites ?? [])
 
   return (
-    <aside className="rounded-2xl border border-white/10 bg-surface/80 p-5 shadow-2xl shadow-black/20 backdrop-blur sm:p-6">
+    <aside className="cq-panel bg-surface/85 p-5 backdrop-blur sm:p-6">
       <div className="flex items-center justify-between gap-4">
         <div>
           <p className="eyebrow">Concept trail</p>
-          <h2 className="mt-1 text-lg font-bold">Recovery map</h2>
+          <h2 className="mt-2 text-lg font-bold">Recovery map</h2>
         </div>
         <span className={`status-dot ${recovered ? 'bg-secondary' : 'bg-primary'}`} aria-hidden="true" />
       </div>
