@@ -10,13 +10,11 @@ on:
       - 'fixtures/**'
       - 'scripts/check-fixtures-sync.sh'
       - '.github/workflows/backend.yml'
+  # No paths filter on pull_request on purpose: these two report the status checks
+  # that gate a merge, and a required check that never runs leaves a PR blocked
+  # forever waiting for it. The jobs take well under a minute and the repo is
+  # public, so running them on every PR costs nothing worth saving.
   pull_request:
-    paths:
-      - 'backend/**'
-      - 'schema/**'
-      - 'fixtures/**'
-      - 'scripts/check-fixtures-sync.sh'
-      - '.github/workflows/backend.yml'
 
 concurrency:
   group: backend-${{ github.ref }}
