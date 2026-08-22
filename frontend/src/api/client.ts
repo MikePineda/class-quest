@@ -90,6 +90,9 @@ export const api = {
   postAttempt: (id: string, body: T.AttemptIn) => req<T.AttemptOut>('POST', `/worlds/${id}/attempts`, body),
   getProgress: (id: string) => req<T.ProgressOut>('GET', `/worlds/${id}/progress`),
   explain: (id: string, body: T.ExplainIn) => req<T.ExplainOut>('POST', `/worlds/${id}/explain`, body),
+  /** Stateless: post the whole conversation every time. A retry re-posts an identical body. */
+  explainTurn: (id: string, body: T.ExplainChatIn) =>
+    req<T.ExplainChatOut>('POST', `/worlds/${id}/explain/turn`, body),
 }
 
 export type Api = typeof api
