@@ -1,0 +1,24 @@
+# Root .dockerignore: backend/Dockerfile builds with the REPO ROOT as context
+# (it needs schema/ and fixtures/). Keep the context small and secret-free.
+.git
+.github
+docs
+frontend
+.data
+*.db
+*.db-wal
+*.db-shm
+course-input
+**/*.md
+**/.env
+**/.env.*
+backend/.venv
+backend/tests
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ruff_cache
+**/.DS_Store
+**/.idea
+**/.vscode
+docker-compose.yml
