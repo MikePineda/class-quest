@@ -251,21 +251,21 @@ export function WorldExperience({ worldId }: WorldExperienceProps) {
       {
         kind: 'storybook',
         label: 'Storybook',
-        blurb: 'Read the theory, in the order it builds.',
+        blurb: 'Read the ideas, in the order they build on each other.',
         // No concepts means nothing to read. Locked beats an empty book.
         locked: !graph || graph.concepts.length === 0,
       },
       {
         kind: 'quiz',
         label: 'Quiz',
-        blurb: 'Answer under pressure and meet the belief you actually hold.',
+        blurb: 'Answer questions and see where you went wrong.',
         // The gauntlet is the only question source; degraded worlds have none.
         locked: !gauntlet,
       },
       {
         kind: 'explain',
         label: 'Explain to Win',
-        blurb: 'Teach it to a student who keeps asking why.',
+        blurb: 'Explain it to someone who keeps asking why.',
         // The graph is what the AI student is ignorant about.
         locked: !graph,
       },
@@ -572,7 +572,7 @@ export function WorldExperience({ worldId }: WorldExperienceProps) {
               />
             </div>
             <p className="text-xs font-bold text-secondary" aria-live="polite">
-              {clearedCount} / {gates.length} gates cleared
+              {clearedCount} / {gates.length} portals cleared
             </p>
           </div>
         </div>
@@ -588,7 +588,7 @@ export function WorldExperience({ worldId }: WorldExperienceProps) {
               <kbd className="font-mono text-ink">WASD</kbd> / <kbd className="font-mono text-ink">arrows</kbd> to walk
             </p>
             <p className="mt-1">
-              <kbd className="font-mono text-ink">E</kbd> to enter a gate ·{' '}
+              <kbd className="font-mono text-ink">E</kbd> to enter a portal ·{' '}
               <kbd className="font-mono text-ink">Esc</kbd> to close
             </p>
           </div>
@@ -633,7 +633,7 @@ export function WorldExperience({ worldId }: WorldExperienceProps) {
           <button
             type="button"
             className="absolute inset-0 h-full w-full cursor-default"
-            aria-label="Close gate"
+            aria-label="Close portal"
             onClick={close}
           />
           <section
@@ -651,7 +651,7 @@ export function WorldExperience({ worldId }: WorldExperienceProps) {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="eyebrow" style={{ color: portalArt(openNode.kind).rim }}>
-                  Gate
+                  Portal
                 </p>
                 <h2 id="gate-title" className="mt-2 text-2xl font-black tracking-tight text-ink">
                   {openNode.label}
@@ -818,7 +818,7 @@ export function ScenePanel({
       <DiagnosisStage
         diagnosis={outcome.diagnosis}
         onContinue={hasEvidence ? () => onStage('evidence') : onFinish}
-        continueLabel={hasEvidence ? 'Open verified evidence' : 'Back to the world'}
+        continueLabel={hasEvidence ? 'See what your notes say' : 'Back to the world'}
       />
     )
   }
