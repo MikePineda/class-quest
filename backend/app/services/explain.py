@@ -88,14 +88,14 @@ _SHORT_TEXT_LIMIT = 20
 _WORD_RE = re.compile(r"[a-zA-Z]+")
 
 
-def _tokenize(text: str) -> list[str]:
+def tokenize(text: str) -> list[str]:
     return _WORD_RE.findall(text.lower())
 
 
-def _content_words(text: str) -> list[str]:
+def content_words(text: str) -> list[str]:
     """Unique words (first-occurrence order), length >= 4, minus stopwords."""
     seen: list[str] = []
-    for w in _tokenize(text):
+    for w in tokenize(text):
         if len(w) >= 4 and w not in _STOPWORDS and w not in seen:
             seen.append(w)
     return seen
@@ -117,10 +117,10 @@ def fixture_grade(concept: dict, text: str) -> dict:
         return {"score": 0, "verdict": "fail", "feedback": "That is too short to grade; try again with a full sentence.",
                 "misconception_id": None}
 
-    learner_tokens = set(_tokenize(text))
+    learner_tokens = set(tokenize(text))
     label = concept.get("label", "")
     summary = concept.get("summary", "")
-    summary_words = _content_words(f"{label} {summary}")
+    summary_words = content_words(f"{label} {summary}")
     matched = [w for w in summary_words if w in learner_tokens]
     missing = [w for w in summary_words if w not in learner_tokens]
     coverage = len(matched) / len(summary_words) if summary_words else 0.0
@@ -131,7 +131,7 @@ def fixture_grade(concept: dict, text: str) -> dict:
     for m in concept.get("misconceptions") or []:
         if not isinstance(m, dict):
             continue
-        mis_words = _content_words(m.get("statement", ""))
+        mis_words = content_words(m.get("statement", ""))
         mis_matched = sum(1 for w in mis_words if w in learner_tokens)
         if mis_matched >= 2 and mis_matched > len(matched) and mis_matched > best_mis_matches:
             best_mis_matches = mis_matched

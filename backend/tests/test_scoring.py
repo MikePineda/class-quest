@@ -29,3 +29,17 @@ def test_score_is_clamped():
     assert scoring.clamp_score(-3) == 0
     assert scoring.clamp_score(55.6) == 56
     assert scoring.clamp_score("not a number") == 0
+
+
+def test_socratic_conversation_bounds():
+    assert scoring.SATISFIED_AT == 75
+    assert scoring.MIN_LEARNER_TURNS == 2
+    assert scoring.MAX_LEARNER_TURNS == 4
+    assert scoring.MIN_LEARNER_TURNS < scoring.MAX_LEARNER_TURNS
+
+
+def test_satisfied_enough_at_the_threshold():
+    assert scoring.satisfied_enough(75) is True
+    assert scoring.satisfied_enough(74) is False
+    assert scoring.satisfied_enough(100) is True
+    assert scoring.satisfied_enough(0) is False
