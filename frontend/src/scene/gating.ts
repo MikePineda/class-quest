@@ -31,6 +31,20 @@
  * needs to mean more, it becomes a server field — a backend change, not an edit
  * to this file.
  *
+ * ## The fourth portal
+ *
+ * The fourth door used to be scenery: `sealed` was typed as the literal `false`
+ * because no version of the game could open it. It opens now, once the three
+ * teaching portals are cleared, onto the closing summary of the run.
+ *
+ * That changes nothing about the paragraph above, and the reason is worth
+ * stating: what lies behind the fourth door **summarises, it never awards**.
+ * The XP it prints is the server's `world_xp`, the mastery it lists comes from
+ * `best_correct`, the class numbers come from `GET /servers/{id}/cohort`. A
+ * browser-side clear decides only *when a door is walkable*, which is exactly
+ * the weight it can carry.
+ *
+ *
  * Purity is a hard rule: no DOM, no React, no clock, no randomness, no network.
  * So is never throwing. Everything here is derived from HTTP payloads, and an
  * exception thrown while the hub renders blanks the world.
@@ -56,8 +70,17 @@ export interface ClearState {
   storybook: boolean
   quiz: boolean
   explain: boolean
-  /** Reserved for the sealed portal, which no version of this game can open yet. */
-  sealed: false
+  /**
+   * The fourth portal, keyed by its `PortalKind` like its three siblings.
+   *
+   * `true` means **unsealed**: the three teaching portals are cleared and the
+   * closing summary is walkable. It is the one field here whose `true` reads as
+   * "this door is open" rather than "the learner finished this door" — the
+   * browser cannot know whether anybody stepped through, and does not need to,
+   * because nothing downstream depends on it. Read it through `closureOpen` at
+   * call sites, where the name says which of the two it means.
+   */
+  sealed: boolean
 }
 
 /** A `ReadonlySet` that arrived over a boundary may be anything. Ask it politely. */
@@ -101,10 +124,31 @@ export function clearedPortals(input: ClearInput): ClearState {
 
   const explain = concepts.some((id) => has(input?.explainedConceptIds, id))
 
-  return { storybook, quiz, explain, sealed: false }
+  // The fourth door is derived, never input: it opens exactly when the three
+  // teaching portals are cleared. Nothing else can open it and nothing it shows
+  // is invented there — see the header note.
+  const sealed = storybook && quiz && explain
+
+  return { storybook, quiz, explain, sealed }
 }
 
-/** The world is cleared when all three openable portals are. `sealed` never counts. */
+/**
+ * The world is cleared when all three **teaching** portals are.
+ *
+ * It still does not wait on `sealed`, and now for a stronger reason than
+ * "`sealed` can never be true": `sealed` is derived from these same three, so
+ * counting it here would make the condition circular — the fourth door would be
+ * waiting on a world that is waiting on the fourth door. Causality runs one
+ * way: clearing the world unseals the door.
+ */
 export function worldCleared(state: ClearState): boolean {
   return Boolean(state?.storybook && state?.quiz && state?.explain)
+}
+
+/**
+ * Is the closing summary walkable? Total, like everything else here: a state
+ * object that arrived from anywhere at all reads as "still sealed".
+ */
+export function closureOpen(state: ClearState): boolean {
+  return state?.sealed === true
 }

@@ -5,6 +5,10 @@
  * silently declaring itself finished, and a correct answer from somewhere else
  * leaking into the count.
  *
+ * The fourth door is a fourth claim now ("the run is over"), so it gets the same
+ * treatment: it opens on exactly the three clears and never on its own say-so,
+ * and it can never be what a world is waiting for.
+ *
  * The other half is total-ness. These inputs are assembled from HTTP payloads
  * and from client state that may not have loaded yet, so no shape of input may
  * throw — a throw here blanks the hub.
@@ -12,8 +16,8 @@
 
 import { describe, expect, it } from 'vitest'
 
-import type { ClearInput } from './gating'
-import { QUIZ_PASS_RATIO, clearedPortals, quizThreshold, worldCleared } from './gating'
+import type { ClearInput, ClearState } from './gating'
+import { QUIZ_PASS_RATIO, clearedPortals, closureOpen, quizThreshold, worldCleared } from './gating'
 
 /** An input that clears nothing, so each test can turn on exactly one thing. */
 const emptyInput: ClearInput = {
@@ -141,11 +145,14 @@ describe('clearedPortals: explain', () => {
 })
 
 describe('clearedPortals: sealed', () => {
-  it('is false on an empty world', () => {
+  it('is sealed on an empty world', () => {
     expect(clearedPortals(emptyInput).sealed).toBe(false)
   })
 
-  it('is still false when everything else is cleared', () => {
+  it('unseals once all three teaching portals are cleared', () => {
+    // This is the whole change: the fourth door used to be scenery. It now
+    // opens onto the closing summary, which reports the server's numbers and
+    // awards nothing — so a browser-side clear is allowed to decide it.
     const state = clearedPortals({
       conceptIds: ['a'],
       readConceptIds: new Set(['a']),
@@ -153,7 +160,45 @@ describe('clearedPortals: sealed', () => {
       correctSceneIds: new Set(['q1']),
       explainedConceptIds: new Set(['a']),
     })
-    expect(state.sealed).toBe(false)
+    expect(state.sealed).toBe(true)
+    expect(closureOpen(state)).toBe(true)
+  })
+
+  it('stays sealed while any one teaching portal is open', () => {
+    const base = {
+      conceptIds: ['a'],
+      readConceptIds: new Set(['a']),
+      quizSceneIds: ['q1'],
+      correctSceneIds: new Set(['q1']),
+      explainedConceptIds: new Set(['a']),
+    }
+    expect(clearedPortals({ ...base, readConceptIds: new Set<string>() }).sealed).toBe(false)
+    expect(clearedPortals({ ...base, correctSceneIds: new Set<string>() }).sealed).toBe(false)
+    expect(clearedPortals({ ...base, explainedConceptIds: new Set<string>() }).sealed).toBe(false)
+  })
+
+  it('agrees with worldCleared, because it is derived from it', () => {
+    const state = clearedPortals({
+      conceptIds: ['a', 'b'],
+      readConceptIds: new Set(['a', 'b']),
+      quizSceneIds: ['q1', 'q2', 'q3'],
+      correctSceneIds: new Set(['q1', 'q2', 'q3']),
+      explainedConceptIds: new Set(['b']),
+    })
+    expect(state.sealed).toBe(worldCleared(state))
+  })
+})
+
+describe('closureOpen', () => {
+  it('reads the fourth door and nothing else', () => {
+    expect(closureOpen({ storybook: true, quiz: true, explain: true, sealed: true })).toBe(true)
+    expect(closureOpen({ storybook: true, quiz: true, explain: true, sealed: false })).toBe(false)
+  })
+
+  it('treats any state that is not a state as sealed', () => {
+    // A door that opens on garbage is worse than a door that stays shut.
+    expect(closureOpen(undefined as unknown as ClearState)).toBe(false)
+    expect(closureOpen({ sealed: 'yes' } as unknown as ClearState)).toBe(false)
   })
 })
 
@@ -212,9 +257,17 @@ describe('worldCleared', () => {
     expect(worldCleared({ storybook: true, quiz: true, explain: false, sealed: false })).toBe(false)
   })
 
-  it('does not wait on the sealed portal', () => {
-    // `sealed` is permanently false; if it counted, no world could ever clear.
+  it('does not wait on the sealed portal, which now depends on it', () => {
+    // This used to hold because `sealed` was permanently false. It has to keep
+    // holding for a stronger reason: `sealed` is derived from these three, so
+    // counting it here would be circular — the fourth door would wait on a
+    // world that waits on the fourth door, and neither would ever open.
+    // A `sealed: false` handed in from anywhere (a stale state, a hand-built
+    // one) therefore cannot hold a cleared world back.
     expect(worldCleared({ storybook: true, quiz: true, explain: true, sealed: false })).toBe(true)
+    expect(worldCleared({ storybook: true, quiz: true, explain: true, sealed: true })).toBe(true)
+    // And an unsealed door never stands in for a portal nobody cleared.
+    expect(worldCleared({ storybook: false, quiz: true, explain: true, sealed: true })).toBe(false)
   })
 
   it('never throws on an empty world', () => {
