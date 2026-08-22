@@ -44,9 +44,17 @@ _STEM = 5
 
 # Exactly two question templates, one per gap source, plus a "say more" nudge
 # for a too-short turn or a concept with nothing left to ask about.
-_Q_MISCONCEPTION = "Wait — I thought {statement} Why is that not right?"
+# The belief is quoted rather than spliced into the sentence. Statements are
+# authored as standalone sentences and many begin with "If" or a proper noun,
+# which reads as broken grammar after "I thought": quoting sidesteps it
+# entirely and makes clear the student is repeating something back.
+_Q_MISCONCEPTION = 'Hold on. I had it as: "{statement}" Why is that not right?'
 _Q_TERM = "My notes keep mentioning {term}. Where does {term} fit into {label}?"
 _Q_MORE = "Okay — can you walk me through how {label} actually works, step by step?"
+# Asked when the student has already raised this belief and the learner has not
+# dislodged it. Repeating the first question verbatim reads as a broken loop
+# rather than as a student who is still stuck.
+_Q_REASK = "I still do not follow. What would go wrong if I kept believing that?"
 
 
 # ------------------------------------------------------------------ reading
@@ -147,7 +155,7 @@ def _analyse(concept: dict, turns) -> dict:
     }
 
 
-def _next_question(concept: dict, a: dict) -> tuple[str, str | None]:
+def _next_question(concept: dict, a: dict, turns=()) -> tuple[str, str | None]:
     """The deterministic gap queue: unaddressed misconceptions in graph order,
     then uncovered summary words in first-occurrence order."""
     label = _label_of(concept)
@@ -157,9 +165,21 @@ def _next_question(concept: dict, a: dict) -> tuple[str, str | None]:
     if a["learner_count"] and len(a["newest"]) < explain._SHORT_TEXT_LIMIT:
         return _Q_MORE.format(label=label), None
 
+    # What the student has already said, so a belief is never raised twice in
+    # the same words.
+    # Defensive on purpose: this module never raises on a malformed transcript,
+    # because it is fed straight from an HTTP body.
+    asked = " ".join(
+        str(t.get("text", ""))
+        for t in turns or ()
+        if isinstance(t, dict) and t.get("role") == "student"
+    )
+
     for m in a["unaddressed"]:
         statement = m.get("statement")
         if isinstance(statement, str) and statement.strip():
+            if statement.strip()[:60] in asked:
+                return _Q_REASK, m["id"]
             return _Q_MISCONCEPTION.format(statement=_sentence(statement)), m["id"]
 
     if a["gaps"]:
@@ -267,7 +287,7 @@ def fixture_turn(concept: dict, turns) -> dict:
         understanding = min(understanding, _HELD_CAP)
     satisfied = not a["unaddressed"] and a["coverage"] >= _SATISFIED_COVERAGE
 
-    question, targeted = _next_question(concept, a)
+    question, targeted = _next_question(concept, a, turns)
     return _normalize_turn(
         concept,
         {
