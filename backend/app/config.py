@@ -7,7 +7,7 @@ fixtures instead of calling MiniMax. CI runs that path on purpose.
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import field_validator
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # backend/app/config.py -> repo root is two levels up from backend/
@@ -25,7 +25,11 @@ class Settings(BaseSettings):
 
     jwt_secret: str = "dev-secret-change-me"
     jwt_expire_hours: int = 168
-    cors_origins: list[str] = ["http://localhost:5173"]
+    # Kept as a plain string on purpose. A list-typed setting makes
+    # pydantic-settings JSON-decode the env value before any validator runs,
+    # so a comma-separated CORS_ORIGINS is a hard SettingsError at import
+    # time and the container never starts. The split lives in the property.
+    cors_origins_raw: str = Field("http://localhost:5173", validation_alias="CORS_ORIGINS")
     public_api_url: str = "http://localhost:8000"
 
     llm_api_key: str = ""
@@ -43,12 +47,10 @@ class Settings(BaseSettings):
 
     seed_demo: bool = True
 
-    @field_validator("cors_origins", mode="before")
-    @classmethod
-    def _split_origins(cls, v):
-        if isinstance(v, str):
-            return [o.strip() for o in v.split(",") if o.strip()]
-        return v
+    @property
+    def cors_origins(self) -> list[str]:
+        """Allowed browser origins, comma-separated in the environment."""
+        return [o.strip() for o in self.cors_origins_raw.split(",") if o.strip()]
 
     @property
     def llm_enabled(self) -> bool:
