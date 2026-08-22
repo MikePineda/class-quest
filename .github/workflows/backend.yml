@@ -8,12 +8,14 @@ on:
       - 'backend/**'
       - 'schema/**'
       - 'fixtures/**'
+      - 'scripts/check-fixtures-sync.sh'
       - '.github/workflows/backend.yml'
   pull_request:
     paths:
       - 'backend/**'
       - 'schema/**'
       - 'fixtures/**'
+      - 'scripts/check-fixtures-sync.sh'
       - '.github/workflows/backend.yml'
 
 concurrency:
@@ -28,6 +30,9 @@ jobs:
         working-directory: backend
     steps:
       - uses: actions/checkout@v4
+      - name: Fixtures in sync with the frontend copy
+        working-directory: .
+        run: bash scripts/check-fixtures-sync.sh
 
       - uses: actions/setup-python@v5
         with:
