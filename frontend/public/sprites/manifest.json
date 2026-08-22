@@ -83,6 +83,11 @@
     "h": 32,
     "w": 16
   },
+  "props/portal_arch.png": {
+    "from": "Environment/Tilesets/Dungeon_Tiles.png@0,160",
+    "h": 48,
+    "w": 32
+  },
   "props/signpost.png": {
     "frame": 32,
     "frames": 1,

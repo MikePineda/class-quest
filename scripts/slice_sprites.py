@@ -43,6 +43,10 @@ CUTS = [
     ("tiles/wall_brown_face.png", "Environment/Tilesets/Wall_Tiles.png",   224,  96, 16, 16),
     # Props named by the `prop` enum in schema/game.schema.json.
     ("props/doorway_pair.png",    "Environment/Props/Static/Dungeon_Props.png", 112,  0, 32, 32),
+    # A stone archway with a hollow black interior. This is the portal frame:
+    # the darkness inside is what the code-drawn vortex is painted onto, so the
+    # arch reads as masonry around a hole rather than as a closed door.
+    ("props/portal_arch.png",     "Environment/Tilesets/Dungeon_Tiles.png",       0, 160, 32, 48),
     ("props/lantern.png",         "Environment/Props/Static/Dungeon_Props.png",  64, 32, 16, 32),
     ("props/chest.png",           "Environment/Props/Static/Furniture.png",      48, 16, 32, 32),
     ("props/crystal_cluster.png", "Environment/Props/Static/Resources.png",      80, 16, 16, 16),
