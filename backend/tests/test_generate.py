@@ -589,3 +589,58 @@ def test_start_pipeline_thread_is_daemon(monkeypatch):
     finally:
         with generate._inflight_lock:
             generate._inflight.discard(sid)
+
+
+class TestEffectiveMaxWorlds:
+    """The world count must follow the amount of content, not just the ceiling.
+
+    A 14-segment upload split into 6 worlds gives ~2 segments each: thin worlds
+    and 18 LLM calls before anything is playable. _even_chunks already used a
+    one-world-per-six-segments rule; the planner now uses the same one, so the
+    model is asked for a sensible number and cannot exceed it.
+    """
+
+    def test_short_upload_gets_a_single_world(self):
+        assert generate._effective_max_worlds(5, 6) == 1
+        assert generate._effective_max_worlds(6, 6) == 1
+
+    def test_medium_upload_scales_with_content(self):
+        assert generate._effective_max_worlds(14, 6) == 3
+        assert generate._effective_max_worlds(20, 6) == 4
+
+    def test_long_upload_is_capped_by_the_setting(self):
+        assert generate._effective_max_worlds(200, 6) == 6
+        assert generate._effective_max_worlds(200, 2) == 2
+
+    def test_never_returns_less_than_one(self):
+        assert generate._effective_max_worlds(1, 6) == 1
+        assert generate._effective_max_worlds(0, 6) == 1
+
+    def test_matches_the_deterministic_fallback(self):
+        for n in (1, 5, 13, 14, 25, 60):
+            assert len(generate._even_chunks(n, 6, "S")) == generate._effective_max_worlds(n, 6)
+
+    def test_plan_worlds_caps_an_over_eager_model(self, monkeypatch):
+        segments = [f"segment {i}" for i in range(14)]
+        raw = {"worlds": [
+            {"title": f"W{i}", "blurb": "", "segment_start": i * 2, "segment_end": i * 2 + 1}
+            for i in range(6)
+        ]}
+        monkeypatch.setattr(generate.llm, "call_json", lambda *a, **k: raw)
+        plan = generate.plan_worlds("Course", None, segments, 6)
+        assert len(plan) <= 3
+        assert plan[0]["segment_start"] == 0
+        assert plan[-1]["segment_end"] == 13
+
+    def test_planner_prompt_is_asked_for_the_effective_number(self, monkeypatch):
+        segments = [f"segment {i}" for i in range(14)]
+        seen = {}
+
+        def fake_prompt(name, desc, segs, max_worlds):
+            seen["max_worlds"] = max_worlds
+            return ("sys", "user")
+
+        monkeypatch.setattr(generate.prompts, "planner_prompt", fake_prompt)
+        monkeypatch.setattr(generate.llm, "call_json", lambda *a, **k: {"worlds": []})
+        generate.plan_worlds("Course", None, segments, 6)
+        assert seen["max_worlds"] == 3
