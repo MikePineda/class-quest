@@ -380,3 +380,48 @@ def test_derive_gauntlet_validates_against_graph(graph, quest):
     ]
     assert [s["id"] for s in ch["scenes"]] == ["g_sc_pred_training", "g_sc_pred_overfit"]
     assert all(s["type"] == "prediction" for s in ch["scenes"])
+
+
+class TestDeriveGauntletSurvivesNulls:
+    """derive_gauntlet is the fallback we reach *because* the model output was
+    bad, so it is exactly the function that must not add a crash of its own.
+
+    Found in production: a quest whose chapter carried "scenes": null made it
+    raise TypeError('NoneType' object is not iterable), which surfaced to the
+    user as an opaque failed world. `.get("scenes", [])` does not help — the
+    default only applies when the key is missing, not when its value is null.
+    """
+
+    def _quest_with(self, quest, **overrides):
+        q = copy.deepcopy(quest)
+        q["chapters"][0].update(overrides)
+        return q
+
+    def test_null_scenes_in_a_chapter(self, graph, quest):
+        out = v.derive_gauntlet(self._quest_with(quest, scenes=None), graph)
+        assert out["archetype"] == "gauntlet"
+        assert out["graph_id"] == graph["graph_id"]
+
+    def test_null_chapters(self, graph, quest):
+        q = copy.deepcopy(quest)
+        q["chapters"] = None
+        out = v.derive_gauntlet(q, graph)
+        assert out["chapters"][0]["scenes"] == []
+
+    def test_null_options_on_a_prediction_scene(self, graph, quest):
+        q = copy.deepcopy(quest)
+        for ch in q["chapters"]:
+            for sc in ch["scenes"]:
+                if sc["type"] == "prediction":
+                    sc["options"] = None
+        v.derive_gauntlet(q, graph)  # must not raise
+
+    def test_null_concepts_in_the_graph(self, graph, quest):
+        g = copy.deepcopy(graph)
+        g["concepts"] = None
+        out = v.derive_gauntlet(quest, g)
+        assert out["chapters"][0]["concept_ids"] == []
+
+    def test_a_healthy_quest_still_derives_a_valid_gauntlet(self, graph, quest):
+        out = v.derive_gauntlet(quest, graph)
+        assert v.validate_game(out, graph) == []
