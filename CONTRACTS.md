@@ -38,7 +38,7 @@ Naming (Minecraft analogy): a **Server** is a class/course (name, join code, pub
 1. `GET /worlds/{id}` → `graph`, `games.quest`, `games.gauntlet`, `my_progress`.
 2. Render `games.quest.chapters[].scenes[]` in order. `dialogue` → show lines (mascot = server `pet` when `speaker === "mentor_owl"`). `prediction` → prompt + options; on pick, `POST /worlds/{id}/attempts {archetype:"quest", scene_id, option_id}` and show `reveal` + `misconception.correction` if wrong. `simulation` → the hand-built widget named in `widget`.
 3. Gauntlet = same loop over `games.gauntlet` with `archetype: "gauntlet"`. Lives and the timer are frontend-only; the server just records attempts.
-4. Explain to Win: `POST /worlds/{id}/explain {concept_id, text}` (graded synchronously, up to 60 s — show a spinner).
+4. Explain to Win: one-shot with `POST /worlds/{id}/explain {concept_id, text}`, or as a Socratic chat with `POST /worlds/{id}/explain/turn {concept_id, turns}` (both graded synchronously, up to 60 s — show a spinner).
 5. `GET /worlds/{id}/progress` to restore state on reload; `GET /servers/{id}/leaderboard` and `/cohort` for the social screens.
 
 ## Endpoints
@@ -62,6 +62,7 @@ Naming (Minecraft analogy): a **Server** is a class/course (name, join code, pub
 | POST | `/worlds/{id}/attempts` | yes | `AttemptIn` | `AttemptOut` |
 | GET | `/worlds/{id}/progress` | yes | — | `ProgressOut` |
 | POST | `/worlds/{id}/explain` | yes | `ExplainIn` | `ExplainOut` · `503` grader down |
+| POST | `/worlds/{id}/explain/turn` | yes | `ExplainChatIn` | `ExplainChatOut` · `503` grader down |
 
 ### `GET /health`
 ```json
@@ -347,6 +348,41 @@ Correct answer → `"correct": true, "xp_awarded": 10, "misconception": null`. R
 }
 ```
 `text` must be 20–4000 chars. Verdict thresholds: `score ≥ 70` pass (25 XP), `40–69` partial (10 XP), else fail (0). XP only on the first pass/partial per concept per world; later tries return `xp_awarded: 0`. `misconception_id` is set when the grader recognises a known wrong belief in the text. `503` if the grader fails — offer retry.
+
+### `POST /worlds/{id}/explain/turn` (sync, the Socratic sibling)
+
+The learner explains, an AI *student* asks follow-ups until it understands, and a comprehension meter fills. **The server keeps no chat state:** post the whole transcript every time — the reply is a pure function of `(concept_id, turns)`. Retrying a failed request means re-posting the identical body.
+
+```json
+// request
+{
+  "concept_id": "overfitting",
+  "turns": [
+    { "role": "learner", "text": "Overfitting is when a model learns the training data too well." },
+    { "role": "student", "text": "Wait — I thought 99 percent on training means roughly 99 percent on new data. Why is that not right?" },
+    { "role": "learner", "text": "The two scores decouple once the model starts fitting noise: training error keeps falling while the error on new data rises." }
+  ]
+}
+// response, mid-conversation
+{
+  "done": false,
+  "understanding": 47,
+  "question": "Wait — I thought Overfitting means the data was dirty. Why is that not right?",
+  "targeted_misconception_id": "overfitting_is_bad_data",
+  "turns_remaining": 2,
+  "result": null
+}
+// response, final turn — `result` is the same ExplainOut the one-shot endpoint returns
+{ "done": true, "understanding": 100, "question": null, "targeted_misconception_id": null, "turns_remaining": 0,
+  "result": { "score": 100, "verdict": "pass", "xp_awarded": 25, "feedback": "The student gets it now — you answered every follow-up and left no gaps.", "misconception_id": null, "concept": { "id": "overfitting", "label": "Overfitting", "summary": "…" }, "world_xp": 62, "server_xp": 62 } }
+```
+
+- `role` is `learner` (the player) or `student` (the AI). **Only `learner` turns are scored** — `student` turns are context for the next question and can never earn XP.
+- Transcript limits (all `422`): at most 12 turns, 1200 chars per turn, 8000 chars total, the **last turn must be the learner's**, and the learner's combined text must be at least 20 chars.
+- `understanding` is 0–100, the same scale as `ExplainOut.score`; drive the meter from it. `turns_remaining` counts the learner turns left before the student stops asking (max 4), so the ending never looks arbitrary.
+- `question` is `null` exactly when `done` is `true`. `targeted_misconception_id` is set when the question is aimed at a known misconception, so you can highlight it.
+- **Nothing is written until `done`.** Abandoning a chat stores nothing and earns nothing. On the final turn the server writes one explanation (the rendered transcript) plus one attempt and returns `result` — same XP rules as `/explain`: 25 pass / 10 partial, first pass or partial per concept per world only, later conversations return `xp_awarded: 0`.
+- `409` if the world is not ready, `404` for an unknown `concept_id`, `503` if the grader is unavailable (live-model path only; the fixture student never fails) — offer retry, which re-posts the identical body.
 
 ## Content contract (what you render)
 
