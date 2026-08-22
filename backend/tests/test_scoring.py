@@ -29,3 +29,7 @@ def test_score_is_clamped():
     assert scoring.clamp_score(-3) == 0
     assert scoring.clamp_score(55.6) == 56
     assert scoring.clamp_score("not a number") == 0
+
+
+def test_deliberately_failing_probe():
+    assert scoring.xp_for_prediction(correct=True, first_time=True) == 999
