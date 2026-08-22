@@ -45,9 +45,11 @@ Nothing here is broken; these are the things deliberately left.
 2. **Simulation scenes are a labelled placeholder.** `widget` values (`curve_fit`,
    `threshold_slider`, …) render as a name and an instruction. Only the quest carries
    them, and the quest is no longer walkable, so nothing reaches this today.
-3. **The live model path for the chat is not built** (plan section B4). `socratic.next_turn`
-   calls `fixture_turn` unconditionally. This is deliberate: the fixture path is instant,
-   deterministic and demo-safe. Wiring the live path is one function plus a prompt.
+3. ~~The live model path for the chat is not built.~~ **Built.** `socratic.next_turn` calls
+   the model through `llm.call_json` with `prompts.socratic_prompt`, and falls back to
+   `fixture_turn` on `FixtureMode`, `LLMError` and `LLMFormatError` — unlike
+   `explain.grade_explanation`, which answers 503. Production runs with a live key
+   (`/health` reports `llm: "live"`); a turn takes about three seconds.
 4. **The boss bar was cut.** Design decided: derive it read-only from `GET /servers/{id}/cohort`,
    which already returns per-scene distributions — zero backend work — and **never** let it
    gate anyone's progress.
@@ -103,3 +105,17 @@ Worth remembering because fixtures hid both:
   wrong used to read as "Mastered".
 
 Test against a real generated world, not only `fixtures/`.
+
+## Two more that only real content revealed
+
+- **No gauntlet scene declares a prop.** Not one, in any world on the deployed server. Props
+  live only on quest scenes, so `SceneIllustration` had nothing to draw and `chart_frame` —
+  the one prop drawn in code rather than blitted — reached no screen at all. A question now
+  inherits the props its concept was given in the quest; see `frontend/src/scene/conceptProps.ts`
+  for exactly what is and is not carried across.
+- **The quest is unreachable.** Since the hub redesign the storybook reads the graph, the quiz
+  reads the gauntlet and the chat reads the graph. `games.quest` is loaded and used for the
+  world title and nothing else, so its dialogue, its simulations and its props are dead weight
+  on the wire. Worth deciding deliberately rather than inheriting.
+- **`WorldSummary.my_completion` counts scenes *attempted*, not answered correctly.** Anything
+  built on it must say "walked", never "mastered". Mastery is `best_correct`.
