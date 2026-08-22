@@ -3,8 +3,7 @@
 #   docker build -f backend/Dockerfile -t classquest-api .
 # Dokploy: Dockerfile=backend/Dockerfile, build context=/ (repo root).
 # python:3.12-slim ships linux/arm64, so it runs on the Oracle aarch64 box.
-FROM python:3.12-slim
-
+FROM python:3.12-slim AS runtime
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1
