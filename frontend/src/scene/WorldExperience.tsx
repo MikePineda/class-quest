@@ -881,6 +881,9 @@ export function WorldExperience({ worldId }: WorldExperienceProps) {
         (openNode.kind === 'quiz' && gauntlet ? (
           <QuizPanel
             gauntlet={gauntlet}
+            // Read only for the props the model chose per concept: the quest is
+            // not walkable and none of its text reaches the screen.
+            quest={game}
             graph={graph}
             outcomes={session.outcomes}
             restored={session.restored}
