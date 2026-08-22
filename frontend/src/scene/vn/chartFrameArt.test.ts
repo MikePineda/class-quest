@@ -117,7 +117,7 @@ function referenceDrawChartFrame(ctx: CanvasRenderingContext2D, centreX: number,
   for (let i = 0; i <= 22; i += 1) {
     const t = i / 22
     const px = x + 5 + t * (w - 9)
-    const py = y + 6 + (1 - t) ** 1.6 * (h - 12)
+    const py = y + 6 + (h - 12) * (1 - (1 - t) ** 1.6)
     if (i === 0) ctx.moveTo(px, py)
     else ctx.lineTo(px, py)
   }
@@ -129,7 +129,7 @@ function referenceDrawChartFrame(ctx: CanvasRenderingContext2D, centreX: number,
   for (let i = 0; i <= 22; i += 1) {
     const t = i / 22
     const px = x + 5 + t * (w - 9)
-    const py = y + 6 + (h - 12) * (0.15 + 3.4 * (t - 0.42) ** 2)
+    const py = y + 6 + (h - 12) * (1 - (0.06 + 2.2 * (t - 0.42) ** 2))
     if (i === 0) ctx.moveTo(px, py)
     else ctx.lineTo(px, py)
   }
@@ -198,18 +198,36 @@ describe('the geometry the SVG re-plots', () => {
   })
 
   it('falls forever on training and turns back up on validation', () => {
+    // Canvas y grows downward, so loss falling means y *rising*. The previous
+    // version of this test asserted the opposite and passed, which is how the
+    // curves shipped upside down: at 34px on the cavern floor nobody could
+    // read them, and the novel draws the same geometry at poster size.
     const training = chartCurvePoints('training')
-    // Loss falls, so y decreases the whole way across.
     for (let i = 1; i < training.length; i += 1) {
-      expect(training[i].y).toBeLessThan(training[i - 1].y)
+      expect(training[i].y).toBeGreaterThan(training[i - 1].y)
     }
 
     const validation = chartCurvePoints('validation')
-    const lowest = validation.reduce((best, point, i) => (point.y < validation[best].y ? i : best), 0)
-    // The turn is inside the plot, not at either edge: that bend is the picture.
-    expect(lowest).toBeGreaterThan(0)
-    expect(lowest).toBeLessThan(validation.length - 1)
-    expect(validation.at(-1)!.y).toBeGreaterThan(validation[lowest].y)
+    // Lowest loss is the largest y. The turn is inside the plot, not at an
+    // edge: that bend is the whole picture.
+    const cheapest = validation.reduce((best, point, i) => (point.y > validation[best].y ? i : best), 0)
+    expect(cheapest).toBeGreaterThan(0)
+    expect(cheapest).toBeLessThan(validation.length - 1)
+    expect(validation.at(-1)!.y).toBeLessThan(validation[cheapest].y)
+    // Validation ends worse than it began: that gap is overfitting.
+    expect(validation.at(-1)!.y).toBeLessThan(validation[0].y)
+  })
+
+  it('keeps both curves inside the axes', () => {
+    // The old validation curve ran to y+24.1 with the axis at y+21.5, so its
+    // tail hung below the chart it was plotted in.
+    const [top, corner] = chartAxisPoints()
+    for (const series of ['training', 'validation'] as const) {
+      for (const point of chartCurvePoints(series)) {
+        expect(point.y).toBeGreaterThanOrEqual(top.y)
+        expect(point.y).toBeLessThanOrEqual(corner.y)
+      }
+    }
   })
 
   it('draws the axes down the left and along the bottom', () => {
