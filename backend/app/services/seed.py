@@ -6,10 +6,11 @@ import json
 import logging
 
 from app import models
+from app.config import get_settings
 from app.db import session_scope
 from app.ids import new_id, utc_now_iso
 from app.security import hash_password
-from app.services import fixtures, validators
+from app.services import fixtures, scoring, validators
 
 log = logging.getLogger("classquest.seed")
 
@@ -98,3 +99,271 @@ def _ensure_demo_server() -> None:
         ))
 
         log.info("seed: created demo user/server/world")
+
+
+# ------------------------------------------------------------------ cohort
+
+# The demo needs the classroom to look alive: a leaderboard with a real spread
+# and a cohort heatmap that points at one concept. `_ensure_demo_server`
+# returns early once the demo user exists (and in production it already does),
+# so this has its own idempotency marker and its own lifespan call.
+#
+# Which classroom is an env var (DEMO_COHORT_SERVER_ID), because the server the
+# pitch runs on may be a real generated course owned by someone else's account,
+# not the seeded DEMO01 one. Empty falls back to the demo server.
+#
+# Nothing here is random and nothing is tied to the fixture world. The scenes
+# are discovered from whatever the target server actually holds, and the wrong
+# answers come from an explicit per-classmate table applied to scene positions.
+
+COHORT_PASSWORD = "demo1234"
+
+# (display_name, email local part)
+DEMO_COHORT: tuple[tuple[str, str], ...] = (
+    ("Elif Demir", "elif"),
+    ("Aisha Rahman", "aisha"),
+    ("Bruno Alves", "bruno"),
+    ("Chen Wei", "chen"),
+    ("Dara Okoye", "dara"),
+    ("Farid Haddad", "farid"),
+    ("Gemma Ricci", "gemma"),
+    ("Hugo Martins", "hugo"),
+    ("Ines Costa", "ines"),
+    ("Jonas Berg", "jonas"),
+)
+
+COHORT_EMAILS = tuple(f"{local}@classquest.app" for _, local in DEMO_COHORT)
+
+# One scene is singled out as the class's blind spot so `hardest_concept` is
+# never a coin flip: 8 of the 10 get it wrong, 7 of them on the same option.
+# Indexes are into DEMO_COHORT.
+_HARD_WRONG_PRIMARY = (1, 2, 3, 4, 5, 7, 9)
+_HARD_WRONG_SECONDARY = (6,)
+
+# Everything else: per classmate, which *other* scene positions they get wrong
+# and which they never reach. Positions are taken modulo _PATTERN_PERIOD so the
+# table applies to a world with any number of scenes; the aggregate wrong rate
+# stays around a third, well clear of the blind spot's 80%.
+_PATTERN_PERIOD = 5
+# classmate index -> (wrong offsets, skipped offsets)
+_ANSWER_PATTERN: tuple[tuple[tuple[int, ...], tuple[int, ...]], ...] = (
+    ((), ()),               # Elif   - top of the board
+    ((), ()),               # Aisha
+    ((), ()),               # Bruno
+    ((1,), ()),             # Chen
+    ((4,), ()),             # Dara
+    ((2, 3), ()),           # Farid
+    ((0, 3), ()),           # Gemma
+    ((1, 2, 3, 4), ()),     # Hugo   - bottom of the board
+    ((0, 4), (2, 3)),       # Ines   - stopped partway through
+    ((), (1, 2, 3, 4)),     # Jonas  - only just started
+)
+
+
+def ensure_demo_cohort() -> None:
+    try:
+        _ensure_demo_cohort()
+    except Exception:
+        log.exception("seed: failed to create demo cohort")
+
+
+def _prediction_scenes(game_json: str | None) -> list[dict]:
+    """Every `type: "prediction"` scene of a stored game, in order -- the same
+    walk `services/progress.py` does."""
+    if not game_json:
+        return []
+    game = json.loads(game_json)
+    return [
+        scene
+        for chapter in game.get("chapters", [])
+        for scene in chapter.get("scenes", [])
+        if scene.get("type") == "prediction" and isinstance(scene.get("id"), str)
+    ]
+
+
+def _split_options(scene: dict) -> tuple[str | None, list[dict]]:
+    """(correct option id, wrong options in scene order)."""
+    correct = None
+    wrong = []
+    for option in scene.get("options", []):
+        if not isinstance(option.get("id"), str):
+            continue
+        if option.get("correct"):
+            if correct is None:
+                correct = option["id"]
+        else:
+            wrong.append(option)
+    return correct, wrong
+
+
+def _playable_scenes(db, server_id: str) -> list[dict]:
+    """Every answerable prediction scene of every ready world of a server,
+    flattened into one ordered list."""
+    out: list[dict] = []
+    worlds = (
+        db.query(models.World)
+        .filter_by(server_id=server_id, status="ready")
+        .order_by(models.World.idx)
+        .all()
+    )
+    for world in worlds:
+        for archetype, game_id, game_json in (
+            ("quest", world.quest_id, world.quest_json),
+            ("gauntlet", world.gauntlet_id, world.gauntlet_json),
+        ):
+            if not game_id:
+                continue
+            for scene in _prediction_scenes(game_json):
+                correct, wrong = _split_options(scene)
+                if correct is None or not wrong:
+                    continue
+                out.append({
+                    "world_id": world.id, "archetype": archetype, "game_id": game_id,
+                    "scene_id": scene["id"], "concept_id": scene.get("concept_id"),
+                    "correct": correct, "wrong": wrong,
+                })
+    return out
+
+
+def _blind_spot(scenes: list[dict]) -> int | None:
+    """Index of the scene the cohort will mostly get wrong.
+
+    Preferring a scene whose concept has no other scene, and whose wrong
+    options all carry the same belief, is what makes `hardest_concept`
+    meaningful: the errors concentrate on one concept AND on one misconception
+    instead of averaging out across a concept's other scenes.
+    """
+    if not scenes:
+        return None
+    per_concept: dict = {}
+    for s in scenes:
+        per_concept[s["concept_id"]] = per_concept.get(s["concept_id"], 0) + 1
+
+    def rank(i: int) -> tuple:
+        s = scenes[i]
+        beliefs = {o.get("misconception_id") for o in s["wrong"] if o.get("misconception_id")}
+        return (
+            per_concept.get(s["concept_id"], 0) == 1,   # concept owns this scene alone
+            len(beliefs) == 1,                          # every wrong answer means one thing
+            bool(beliefs),                              # ...at least it diagnoses something
+            i,                                          # last such scene, deterministically
+        )
+
+    return max(range(len(scenes)), key=rank)
+
+
+def _target_server(db, server_id: str) -> models.Server | None:
+    """The configured server, or the seeded demo one. A bad id is a warning."""
+    if server_id:
+        server = db.get(models.Server, server_id)
+        if server is None:
+            log.warning("seed: DEMO_COHORT_SERVER_ID %s not found, skipping cohort", server_id)
+            return None
+        if server.status != "ready":
+            log.warning(
+                "seed: DEMO_COHORT_SERVER_ID %s is %s, not ready, skipping cohort",
+                server_id, server.status,
+            )
+            return None
+        return server
+    server = db.query(models.Server).filter_by(join_code=DEMO_JOIN_CODE).one_or_none()
+    if server is None:
+        log.warning("seed: no demo server, skipping cohort")
+    return server
+
+
+def _ensure_demo_cohort() -> None:
+    settings = get_settings()
+    with session_scope() as db:
+        server = _target_server(db, settings.demo_cohort_server_id.strip())
+        if server is None:
+            return
+
+        # Idempotency is per server, not global: the users are global rows, so
+        # seeding classroom A must not make classroom B a no-op. The marker is
+        # the first classmate's membership on *this* server.
+        first = db.query(models.User).filter_by(email=COHORT_EMAILS[0]).one_or_none()
+        if first is not None and db.query(models.Membership.id).filter_by(
+            user_id=first.id, server_id=server.id
+        ).first() is not None:
+            log.info("seed: cohort already on server %s, skipping", server.id)
+            return
+
+        scenes = _playable_scenes(db, server.id)
+        if not scenes:
+            log.warning("seed: server %s has no answerable scenes, skipping cohort", server.id)
+            return
+        hard = _blind_spot(scenes)
+        others = [i for i in range(len(scenes)) if i != hard]
+
+        now = utc_now_iso()
+        # One shared bcrypt hash: ten of them at startup is a second of nothing.
+        password_hash = hash_password(COHORT_PASSWORD)
+        created = 0
+
+        for who, (display_name, local) in enumerate(DEMO_COHORT):
+            email = f"{local}@classquest.app"
+            user = db.query(models.User).filter_by(email=email).one_or_none()
+            if user is None:
+                user = models.User(
+                    id=new_id(), email=email, password_hash=password_hash,
+                    display_name=display_name, role="student", created_at=now,
+                )
+                db.add(user)
+                db.flush()
+
+            if db.query(models.Membership.id).filter_by(
+                user_id=user.id, server_id=server.id
+            ).first() is None:
+                db.add(models.Membership(
+                    id=new_id(), user_id=user.id, server_id=server.id,
+                    role="member", joined_at=now,
+                ))
+
+            wrong_at, skip_at = _ANSWER_PATTERN[who]
+            for position, index in enumerate(others):
+                if position % _PATTERN_PERIOD in skip_at:
+                    continue
+                scene = scenes[index]
+                if position % _PATTERN_PERIOD in wrong_at:
+                    options = scene["wrong"]
+                    option_id = options[(who + position) % len(options)]["id"]
+                else:
+                    option_id = scene["correct"]
+                created += _record(db, user, server, scene, option_id)
+
+            if hard is not None:
+                scene = scenes[hard]
+                if who in _HARD_WRONG_PRIMARY:
+                    option_id = scene["wrong"][0]["id"]
+                elif who in _HARD_WRONG_SECONDARY:
+                    option_id = scene["wrong"][-1]["id"]
+                else:
+                    option_id = scene["correct"]
+                created += _record(db, user, server, scene, option_id)
+
+        log.info(
+            "seed: cohort on server %s -- %d classmates, %d attempts",
+            server.id, len(DEMO_COHORT), created,
+        )
+
+
+def _record(db, user: models.User, server: models.Server, scene: dict, option_id: str) -> int:
+    """Insert one first-time attempt. Never touches an existing row: a real
+    learner's history on this server has to survive a re-seed untouched."""
+    existing = db.query(models.Attempt.id).filter_by(
+        world_id=scene["world_id"], user_id=user.id, scene_id=scene["scene_id"],
+    ).first()
+    if existing is not None:
+        return 0
+    correct = option_id == scene["correct"]
+    db.add(models.Attempt(
+        id=new_id(), user_id=user.id, server_id=server.id, world_id=scene["world_id"],
+        game_id=scene["game_id"], archetype=scene["archetype"], scene_id=scene["scene_id"],
+        option_id=option_id, correct=correct,
+        # These are first answers by construction, so the leaderboard
+        # reconciles against the same rule the live endpoint uses.
+        xp=scoring.xp_for_prediction(correct=correct, first_time=True),
+        created_at=utc_now_iso(),
+    ))
+    return 1
