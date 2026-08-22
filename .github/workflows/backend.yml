@@ -1,0 +1,54 @@
+# Guards merges only. Dokploy deploys on push via webhook, independently.
+name: backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'schema/**'
+      - 'fixtures/**'
+      - '.github/workflows/backend.yml'
+  pull_request:
+    paths:
+      - 'backend/**'
+      - 'schema/**'
+      - 'fixtures/**'
+      - '.github/workflows/backend.yml'
+
+concurrency:
+  group: backend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install
+        run: pip install -r requirements.txt
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Validate fixtures against schema
+        working-directory: .
+        run: python schema/validate.py
+
+      - name: Test
+        env:
+          LLM_API_KEY: ''
+          JWT_SECRET: ci-secret
+          DATA_DIR: /tmp/cq-ci
+          SEED_DEMO: 'false'
+        run: pytest -q
