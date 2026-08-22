@@ -42,23 +42,23 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
       <div className="cq-panel grid w-full max-w-6xl overflow-hidden lg:grid-cols-[1.05fr_0.95fr]">
         <section className="relative hidden min-h-[42rem] overflow-hidden bg-world-night p-12 lg:flex lg:flex-col lg:justify-between">
           <div className="absolute inset-x-0 bottom-0 h-56 bg-gradient-to-t from-world/10 to-transparent" aria-hidden="true" />
-          <Brand />
-          <div className="relative max-w-md">
-            <p className="eyebrow">Your learning world</p>
+          <div className="flex justify-center"><Brand /></div>
+          <div className="relative max-w-md mt-8">
+            <p className="eyebrow !text-lg">Your learning world</p>
             <h1 className="mt-5 text-[2.65rem] font-extrabold leading-[1.12] tracking-tight">Turn lecture notes into a world you can walk.</h1>
             <p className="mt-5 text-base leading-8 text-ink-muted">Upload slides or transcripts. ClassQuest maps the concepts and builds a quest around them—misconceptions included.</p>
             <div className="mt-8 flex items-center gap-5" aria-hidden="true">
               <img className="pixel-art h-16 w-16 object-contain" src="/brand/sprites/mentor-owl.png" alt="" />
-              <div><p className="font-hud text-[10px] tracking-[0.12em] text-secondary">SOURCE-BOUND QUESTS</p><p className="mt-2 text-sm text-ink-muted">Predict. Investigate. Transfer.</p></div>
+              <div><p className="font-hud text-xs tracking-[0.12em] text-secondary">SOURCE-BOUND QUESTS</p><p className="mt-2 text-sm text-ink-muted">Predict. Investigate. Transfer.</p></div>
             </div>
           </div>
           <p className="relative text-xs text-ink-muted">classquest.net · Secure email and password access</p>
         </section>
 
         <section className="bg-surface p-6 sm:p-10 lg:flex lg:flex-col lg:justify-center lg:p-14">
-          <div className="lg:hidden"><Brand /></div>
+          <div className="lg:hidden flex justify-center"><Brand /></div>
           <div className="mt-10 lg:mt-0">
-            <p className="eyebrow">{mode === 'login' ? 'Welcome back' : 'Create your account'}</p>
+            <p className="eyebrow !text-lg">{mode === 'login' ? 'Welcome back' : 'Create your account'}</p>
             <h2 className="mt-2 text-3xl font-black tracking-tight">{mode === 'login' ? 'Sign in to ClassQuest' : 'Start your first quest'}</h2>
             <p className="mt-3 text-ink-muted">{mode === 'login' ? 'Continue to your servers and learning worlds.' : 'We will personalize the experience in the next step.'}</p>
           </div>
@@ -77,7 +77,7 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
             </button>
           </form>
 
-          <div className="my-6 flex items-center gap-4" aria-hidden="true"><span className="h-px flex-1 bg-white/10" /><span className="font-hud text-[9px] text-ink-muted">OR</span><span className="h-px flex-1 bg-white/10" /></div>
+          <div className="my-6 flex items-center gap-4" aria-hidden="true"><span className="h-px flex-1 bg-white/10" /><span className="font-hud text-xs text-ink-muted">OR</span><span className="h-px flex-1 bg-white/10" /></div>
           <a className="button-secondary w-full" href="/demo">Walk the demo world</a>
 
           <p className="mt-6 text-center text-sm text-ink-muted">
