@@ -457,7 +457,9 @@ def _run_world(server_id: str, world_id: str, all_segments: list[str]) -> bool:
             world = s.get(World, world_id)
             world.status = "failed"
             world.stage = None
-            world.error = str(e)[:500]
+            # Name the stage: "gauntlet: ..." is diagnosable from the API,
+            # a bare exception string sends you to the server logs.
+            world.error = f"{stage}: {e}"[:500]
             log_event(s, server_id, stage, f"{title}: {e}", world_id=world_id, level="error")
         return False
 

@@ -689,13 +689,22 @@ def autorepair_game(game: Any, graph: dict) -> tuple[dict, list[str]]:
 # --------------------------------------------------------- derive_gauntlet
 
 
+def _as_list(value) -> list:
+    """A list, whatever the model actually sent.
+
+    `.get("scenes", [])` is not enough: the default only applies when the key
+    is missing, and the model happily emits an explicit null instead.
+    """
+    return value if isinstance(value, list) else []
+
+
 def derive_gauntlet(quest: dict, graph: dict) -> dict:
     """Deterministic fallback Gauntlet: one timed chapter over every
     prediction scene of the quest, in quest order, covering the whole graph."""
-    chapters = quest.get("chapters") if isinstance(quest.get("chapters"), list) else []
+    chapters = _as_list(quest.get("chapters"))
     scenes = []
     for ch in chapters:
-        for sc in ch.get("scenes", []) if isinstance(ch, dict) else []:
+        for sc in _as_list(ch.get("scenes")) if isinstance(ch, dict) else []:
             if isinstance(sc, dict) and sc.get("type") == "prediction":
                 s = copy.deepcopy(sc)
                 s["id"] = f"g_{s.get('id', '')}"[:48]

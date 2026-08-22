@@ -13,7 +13,10 @@ npm run gen:api    # OPENAPI_SOURCE=<api>/openapi.json -> src/api/types.gen.ts
 
 Layout:
 
-- `src/api/types.ts` — hand-written contract types (API DTOs + CourseGraph/Game content). Replace with `types.gen.ts` once the API is deployed.
+- `src/api/types.gen.ts` — **generated from the live API** (`npm run gen:api`, which reads
+  `https://api.classquest.net/openapi.json`). Regenerate it whenever the backend contract changes.
+- `src/api/types.ts` — the hand-written mirror written before the API existed. Still valid and still
+  what `client.ts` imports; migrate imports to `types.gen.ts` when convenient.
 - `src/api/client.ts` — `api.*` typed fetch wrapper, `ApiError`, `getToken`/`setToken` (`localStorage["cq_token"]`).
 - `src/api/poll.ts` — `pollServer(id, onTick)` until `ready | failed`.
 - `src/fixtures/` — the three content fixtures, typed; build the renderer offline against these.
