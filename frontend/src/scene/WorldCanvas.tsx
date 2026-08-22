@@ -24,6 +24,7 @@ import type { Anim, Biome, PortalKind, PortalNode, SceneNode, Still, WorldMap } 
 import type { PlayerBody } from './usePlayer'
 import type { PortalArt } from './vocabulary'
 import { actorArt, biomeFor, portalArt, propArt } from './vocabulary'
+import { CHART_BOX, drawChartFrame as plotChartFrame } from './vn/chartFrameArt'
 
 /** The learner walks the world as the explorer; the other actors stand at their scenes. */
 const PLAYER_ACTOR = 'explorer'
@@ -371,51 +372,19 @@ export function WorldCanvas({ map, player, cleared, activePortal }: WorldCanvasP
      * `chart_frame` is the one prop drawn in code: it frames a real curve —
      * training loss falling while validation loss turns back up — which is the
      * shape the learner is being asked to read.
+     *
+     * The drawing itself now lives in `vn/chartFrameArt`, so the same curve can be
+     * re-plotted at poster size inside a portal instead of only ever existing
+     * as a 34x26 box on the floor. This wrapper decides *where* that box goes
+     * and nothing else; `vn/chartFrameArt.test.ts` holds the pre-extraction code
+     * and asserts the two make identical context calls.
      */
     const drawChartFrame = (centreX: number, footY: number) => {
-      const w = 34
-      const h = 26
-      const x = Math.round(centreX - w / 2)
-      const y = Math.round(footY - h - 6)
-
-      ctx.save()
-      ctx.fillStyle = 'rgba(11, 19, 38, 0.9)'
-      ctx.fillRect(x, y, w, h)
-      ctx.lineWidth = 1
-      ctx.strokeStyle = 'rgba(79, 219, 200, 0.75)'
-      ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1)
-
-      ctx.strokeStyle = 'rgba(218, 226, 253, 0.25)'
-      ctx.beginPath()
-      ctx.moveTo(x + 4.5, y + 3.5)
-      ctx.lineTo(x + 4.5, y + h - 4.5)
-      ctx.lineTo(x + w - 3.5, y + h - 4.5)
-      ctx.stroke()
-
-      // Training loss: down and to the right, forever.
-      ctx.strokeStyle = '#f59e0b'
-      ctx.beginPath()
-      for (let i = 0; i <= 22; i += 1) {
-        const t = i / 22
-        const px = x + 5 + t * (w - 9)
-        const py = y + 6 + (1 - t) ** 1.6 * (h - 12)
-        if (i === 0) ctx.moveTo(px, py)
-        else ctx.lineTo(px, py)
-      }
-      ctx.stroke()
-
-      // Validation loss: down, then back up. The gap is the point.
-      ctx.strokeStyle = '#4fdbc8'
-      ctx.beginPath()
-      for (let i = 0; i <= 22; i += 1) {
-        const t = i / 22
-        const px = x + 5 + t * (w - 9)
-        const py = y + 6 + (h - 12) * (0.15 + 3.4 * (t - 0.42) ** 2)
-        if (i === 0) ctx.moveTo(px, py)
-        else ctx.lineTo(px, py)
-      }
-      ctx.stroke()
-      ctx.restore()
+      plotChartFrame(
+        ctx,
+        Math.round(centreX - CHART_BOX.w / 2),
+        Math.round(footY - CHART_BOX.h - 6),
+      )
     }
 
     const drawMarker = (centreX: number, footY: number, seconds: number, done: boolean, active: boolean) => {
