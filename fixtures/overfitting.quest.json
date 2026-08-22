@@ -72,6 +72,19 @@
           "widget": "curve_fit",
           "instruction": "Raise the curve's flexibility until it passes through every point. Watch what happens to the dotted line, which is the data it has not seen.",
           "success_condition": "Learner observes validation error rising while training error falls."
+        },
+        {
+          "type": "prediction",
+          "id": "sc_transfer_overfit",
+          "concept_id": "overfitting",
+          "props": ["chart_frame"],
+          "prompt": "Training loss keeps falling, but validation loss has risen for five epochs. What should the team conclude?",
+          "options": [
+            { "id": "op_everywhere", "text": "The model is improving everywhere", "correct": false, "misconception_id": "high_train_high_test" },
+            { "id": "op_overfitting", "text": "The model has started overfitting", "correct": true },
+            { "id": "op_dirty_validation", "text": "The validation data must be dirty", "correct": false, "misconception_id": "overfitting_is_bad_data" }
+          ],
+          "reveal": "The widening gap is the signal: training performance keeps improving while validation performance worsens. The model has started fitting noise instead of the underlying pattern."
         }
       ]
     }
