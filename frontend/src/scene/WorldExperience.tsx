@@ -26,7 +26,7 @@
  * they asked for their own is worse than an honest error.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api, ApiError } from '../api/client'
 import type {
   AttemptOut,
@@ -39,7 +39,8 @@ import type {
   SceneProgress,
 } from '../api/types'
 import { fixtureGauntlet, fixtureGraph, fixtureQuest } from '../fixtures'
-import { clearedPortals, worldCleared } from './gating'
+import { WorldClosurePanel, useCohort } from './cohort'
+import { clearedPortals, closureOpen, worldCleared } from './gating'
 import { buildHub } from './hubgen'
 import type { HubPortalSpec } from './hubgen'
 import { conceptTrail, diagnose } from './pedagogy'
@@ -72,7 +73,14 @@ import { FIXTURE_HREF, WorldPicker } from './WorldPicker'
  */
 type Load =
   | { status: 'loading' }
-  | { status: 'ready'; game: Game; gauntlet: Game | null; graph: CourseGraph | null }
+  | {
+      status: 'ready'
+      game: Game
+      gauntlet: Game | null
+      graph: CourseGraph | null
+      /** `WorldDetail.server_id`. The handle for everything the class did. */
+      serverId: string | null
+    }
   | { status: 'picker' }
   | { status: 'empty'; title: string }
   | { status: 'error'; message: string; needsSignIn: boolean }
@@ -217,7 +225,8 @@ export function WorldExperience({ worldId }: WorldExperienceProps) {
         : walksFixture
           ? // The fixture ships its own graph and gauntlet, so the offline demo
             // opens all three gates.
-            { status: 'ready', game: fixtureQuest, gauntlet: fixtureGauntlet, graph: fixtureGraph }
+            // The bundled fixture has no server behind it, so no class either.
+            { status: 'ready', game: fixtureQuest, gauntlet: fixtureGauntlet, graph: fixtureGraph, serverId: null }
           : { status: 'picker' }
 
   const [stored, setStored] = useState<Session>(() => freshSession(worldId))
@@ -256,7 +265,13 @@ export function WorldExperience({ worldId }: WorldExperienceProps) {
         }))
         setFetched({
           id: worldId,
-          value: { status: 'ready', game: quest, gauntlet: detail.games.gauntlet, graph: detail.graph },
+          value: {
+            status: 'ready',
+            game: quest,
+            gauntlet: detail.games.gauntlet,
+            graph: detail.graph,
+            serverId: detail.server_id,
+          },
         })
       })
       .catch((error: unknown) => {
@@ -318,87 +333,14 @@ export function WorldExperience({ worldId }: WorldExperienceProps) {
   const game = load.status === 'ready' ? load.game : null
   const gauntlet = load.status === 'ready' ? load.gauntlet : null
   const graph = load.status === 'ready' ? load.graph : null
+  const serverId = load.status === 'ready' ? load.serverId : null
 
   /**
-   * The four gates, in slot order — `hubgen` maps them onto its anchors by index.
-   *
-   * This MUST stay memoised. An inline array literal is a new object on every
-   * render, which makes `buildHub` rerun, which makes a new `map` identity, and
-   * then two unrelated things break silently: `usePlayer`'s `[map]` effect resets
-   * the player to spawn (reads as "the character cannot move") and
-   * `WorldCanvas`'s preload identity check never settles (reads as "the world
-   * never finishes loading"). Neither symptom points here.
+   * What the rest of the class did. One cached read, never polled: server-side
+   * `cohort` runs a query per prediction scene per ready world, and `leaderboard`
+   * one per member. Failing is silent — the class is context, not the world.
    */
-  const portalSpecs = useMemo<HubPortalSpec[]>(
-    () => [
-      {
-        kind: 'storybook',
-        label: 'Storybook',
-        blurb: 'Read the ideas, in the order they build on each other.',
-        // No concepts means nothing to read. Locked beats an empty book.
-        locked: !graph || graph.concepts.length === 0,
-      },
-      {
-        kind: 'quiz',
-        label: 'Quiz',
-        blurb: 'Answer questions and see where you went wrong.',
-        // The gauntlet is the only question source; degraded worlds have none.
-        locked: !gauntlet,
-      },
-      {
-        kind: 'explain',
-        label: 'Explain to Win',
-        blurb: 'Explain it to someone who keeps asking why.',
-        // The graph is what the AI student is ignorant about.
-        locked: !graph,
-      },
-      { kind: 'sealed', label: 'Sealed', blurb: 'Coming soon', locked: true },
-    ],
-    [graph, gauntlet],
-  )
-
-  // Layout is pure, but it can still reject content the schema let through, so
-  // a throw here is a state and not a crash.
-  const world = useMemo<{ map: WorldMap | null; error: string | null }>(() => {
-    if (!game) return { map: null, error: null }
-    try {
-      return {
-        map: buildHub({
-          // Stable per world: the decor scatter must not move between renders.
-          seed: worldId ?? game.game_id,
-          title: game.title,
-          background: HUB_BACKGROUND,
-          portals: portalSpecs,
-        }),
-        error: null,
-      }
-    } catch (error) {
-      return { map: null, error: error instanceof Error ? error.message : 'The world could not be built.' }
-    }
-  }, [game, worldId, portalSpecs])
-
-  const map = world.map
-
-  // Resolved from the map, so a kind left over from another world simply reads
-  // as "nothing open" and the player keeps walking.
-  const openNode = useMemo<PortalNode | null>(() => {
-    if (!map || !openPortal) return null
-    return map.portals.find((portal) => portal.kind === openPortal) ?? null
-  }, [map, openPortal])
-
-  const player = usePlayer(map, { enabled: openPortal === null })
-  const panelRef = useRef<HTMLDivElement | null>(null)
-
-  /**
-   * A hotspot, not a single tile: at 5.4 tiles/s a one-tile target is genuinely
-   * hard to land on. Keyed on `player.tile` — React state that only changes when
-   * the player crosses a tile boundary — rather than the float body, which would
-   * need a per-frame subscription to buy a few pixels of precision.
-   */
-  const portalHere = useMemo<PortalNode | null>(
-    () => map?.portals.find((portal) => inRect(portal.hotspot, player.tile)) ?? null,
-    [map, player.tile],
-  )
+  const { cohort, loading: loadingClass } = useCohort(serverId)
 
   /**
    * The two lists `gating` reads out of the content, each memoised on the
@@ -436,6 +378,104 @@ export function WorldExperience({ worldId }: WorldExperienceProps) {
       }),
     [conceptIds, read, quizSceneIds, correct, explained],
   )
+
+  /**
+   * The four gates, in slot order — `hubgen` maps them onto its anchors by index.
+   *
+   * This MUST stay memoised. An inline array literal is a new object on every
+   * render, which makes `buildHub` rerun, which makes a new `map` identity, and
+   * then two unrelated things break silently: `usePlayer`'s `[map]` effect resets
+   * the player to spawn (reads as "the character cannot move") and
+   * `WorldCanvas`'s preload identity check never settles (reads as "the world
+   * never finishes loading"). Neither symptom points here.
+   */
+  const portalSpecs = useMemo<HubPortalSpec[]>(
+    () => [
+      {
+        kind: 'storybook',
+        label: 'Storybook',
+        blurb: 'Read the ideas, in the order they build on each other.',
+        // No concepts means nothing to read. Locked beats an empty book.
+        locked: !graph || graph.concepts.length === 0,
+      },
+      {
+        kind: 'quiz',
+        label: 'Quiz',
+        blurb: 'Answer questions and see where you went wrong.',
+        // The gauntlet is the only question source; degraded worlds have none.
+        locked: !gauntlet,
+      },
+      {
+        kind: 'explain',
+        label: 'Explain to Win',
+        blurb: 'Explain it to someone who keeps asking why.',
+        // The graph is what the AI student is ignorant about.
+        locked: !graph,
+      },
+      {
+        kind: 'sealed',
+        label: 'Look back',
+        // It stays shut until the other three are done, which is the only thing
+        // a browser-side clear is allowed to decide: when a door is walkable.
+        // What is behind it summarises and never awards.
+        blurb: closureOpen(clearState)
+          ? 'See what stuck, and how the class did.'
+          : 'Sealed until you have been through the other three.',
+        locked: !closureOpen(clearState),
+      },
+    ],
+    // `clearState.sealed` and not `clearState`, and the lint rule is wrong here.
+    // `clearState` is memoised on the session Sets, and `markRead` replaces the
+    // read Set on every new concept — so depending on the object would rebuild
+    // this array, and therefore the map, every time a page of the storybook is
+    // turned, dropping the player back at spawn mid-read. Only the boolean is
+    // read, and it flips exactly once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [graph, gauntlet, clearState.sealed],
+  )
+
+  // Layout is pure, but it can still reject content the schema let through, so
+  // a throw here is a state and not a crash.
+  const world = useMemo<{ map: WorldMap | null; error: string | null }>(() => {
+    if (!game) return { map: null, error: null }
+    try {
+      return {
+        map: buildHub({
+          // Stable per world: the decor scatter must not move between renders.
+          seed: worldId ?? game.game_id,
+          title: game.title,
+          background: HUB_BACKGROUND,
+          portals: portalSpecs,
+        }),
+        error: null,
+      }
+    } catch (error) {
+      return { map: null, error: error instanceof Error ? error.message : 'The world could not be built.' }
+    }
+  }, [game, worldId, portalSpecs])
+
+  const map = world.map
+
+  // Resolved from the map, so a kind left over from another world simply reads
+  // as "nothing open" and the player keeps walking.
+  const openNode = useMemo<PortalNode | null>(() => {
+    if (!map || !openPortal) return null
+    return map.portals.find((portal) => portal.kind === openPortal) ?? null
+  }, [map, openPortal])
+
+  const player = usePlayer(map, { enabled: openPortal === null })
+
+  /**
+   * A hotspot, not a single tile: at 5.4 tiles/s a one-tile target is genuinely
+   * hard to land on. Keyed on `player.tile` — React state that only changes when
+   * the player crosses a tile boundary — rather than the float body, which would
+   * need a per-frame subscription to buy a few pixels of precision.
+   */
+  const portalHere = useMemo<PortalNode | null>(
+    () => map?.portals.find((portal) => inRect(portal.hotspot, player.tile)) ?? null,
+    [map, player.tile],
+  )
+
 
   const cleared = useMemo<ReadonlySet<PortalKind>>(() => {
     const kinds = new Set<PortalKind>()
@@ -622,11 +662,6 @@ export function WorldExperience({ worldId }: WorldExperienceProps) {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [portalHere, openPortal, close, leave])
 
-  // Move focus into the overlay so the keyboard follows the eye.
-  useEffect(() => {
-    if (openPortal) panelRef.current?.focus()
-  }, [openPortal])
-
   if (!map) {
     if (world.error) {
       return (
@@ -702,8 +737,15 @@ export function WorldExperience({ worldId }: WorldExperienceProps) {
     <div className="relative h-screen w-screen overflow-hidden bg-background">
       <WorldCanvas map={map} player={player.body} cleared={cleared} activePortal={portalHere?.kind ?? null} />
 
-      {/* HUD */}
-      <div className="pointer-events-none absolute inset-0 flex items-start justify-between gap-4 p-4 sm:p-6">
+      {/* HUD. Hidden while a portal is open: the novel shell carries its own
+          top bar, and two competing readouts through the glass is noise. It is
+          hidden rather than unmounted so nothing it feeds gets a new identity. */}
+      <div
+        className={`pointer-events-none absolute inset-0 flex items-start justify-between gap-4 p-4 transition-opacity sm:p-6 ${
+          openPortal ? 'opacity-0' : 'opacity-100'
+        }`}
+        aria-hidden={openPortal !== null}
+      >
         <div className="pointer-events-auto rounded-2xl border border-white/10 bg-background/75 px-4 py-3 shadow-2xl shadow-black/40 backdrop-blur">
           <div className="flex flex-wrap items-center gap-3">
             <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary font-black text-background" aria-hidden="true">
@@ -831,75 +873,46 @@ export function WorldExperience({ worldId }: WorldExperienceProps) {
         </div>
       )}
 
-      {/* Gate overlay. One shell for all four gates: the body switches, the
-          dialog, backdrop and focus behaviour never do. */}
-      {openNode && (
-        <div className="absolute inset-0 z-10 grid place-items-center bg-background/80 p-4 backdrop-blur-sm sm:p-8">
-          <button
-            type="button"
-            className="absolute inset-0 h-full w-full cursor-default"
-            aria-label="Close portal"
-            onClick={close}
+      {/* A portal is not a dialog. Each body renders its own novel shell over
+          the canvas, which stays mounted and running behind the glass — moving
+          it into the overlay would remount the map and drop the player at
+          spawn. The shell owns the heading, the focus and Escape. */}
+      {openNode &&
+        (openNode.kind === 'quiz' && gauntlet ? (
+          <QuizPanel
+            gauntlet={gauntlet}
+            graph={graph}
+            outcomes={session.outcomes}
+            restored={session.restored}
+            committing={committing}
+            cohort={cohort}
+            onCommit={commit}
+            onRetry={retryScenes}
+            onClose={close}
           />
-          <section
-            ref={panelRef}
-            tabIndex={-1}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="gate-title"
-            // One shell, one width knob: the quiz carries a question strip and a
-            // score card and needs the extra column, every other gate does not.
-            className={`stage-enter quest-panel relative max-h-full w-full ${
-              openNode.kind === 'quiz' ? 'max-w-3xl' : 'max-w-2xl'
-            } overflow-y-auto rounded-2xl border border-white/10 bg-surface/95 p-6 shadow-2xl shadow-black/50 outline-none sm:p-8`}
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="eyebrow" style={{ color: portalArt(openNode.kind).rim }}>
-                  Portal
-                </p>
-                <h2 id="gate-title" className="mt-2 text-2xl font-black tracking-tight text-ink">
-                  {openNode.label}
-                </h2>
-                <p className="mt-2 text-sm leading-6 text-ink-muted">{openNode.blurb}</p>
-              </div>
-              <button type="button" className="button-secondary" onClick={close}>
-                Close
-              </button>
-            </div>
-
-            <div className="mt-6">
-              {openNode.kind === 'quiz' && gauntlet ? (
-                <QuizPanel
-                  gauntlet={gauntlet}
-                  graph={graph}
-                  outcomes={session.outcomes}
-                  restored={session.restored}
-                  committing={committing}
-                  onCommit={commit}
-                  onRetry={retryScenes}
-                  onClose={close}
-                />
-              ) : openNode.kind === 'explain' && graph ? (
-                <ExplainPanel
-                  worldId={worldId ?? null}
-                  graph={graph}
-                  explained={explained}
-                  onCleared={onExplained}
-                  onClose={close}
-                />
-              ) : openNode.kind === 'storybook' ? (
-                <StorybookPanel graph={graph} readIds={read} onRead={markRead} onClose={close} />
-              ) : (
-                // Only `sealed` reaches here, and it is locked, so nothing can
-                // open it: no keyboard path, no click path. The branch exists so
-                // the switch is total.
-                null
-              )}
-            </div>
-          </section>
-        </div>
-      )}
+        ) : openNode.kind === 'explain' && graph ? (
+          <ExplainPanel
+            worldId={worldId ?? null}
+            graph={graph}
+            explained={explained}
+            onCleared={onExplained}
+            onClose={close}
+          />
+        ) : openNode.kind === 'storybook' ? (
+          <StorybookPanel graph={graph} readIds={read} onRead={markRead} onClose={close} />
+        ) : openNode.kind === 'sealed' ? (
+          // Reachable now: the fourth door opens once the other three are
+          // cleared. It summarises and never awards — the XP is the server's.
+          <WorldClosurePanel
+            worldTitle={map.title}
+            trail={trail}
+            worldXp={xp}
+            cohort={cohort}
+            loadingClass={loadingClass}
+            onClose={close}
+            onLeave={leave}
+          />
+        ) : null)}
     </div>
   )
 }
