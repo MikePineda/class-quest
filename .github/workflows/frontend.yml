@@ -6,10 +6,14 @@ on:
     branches: [main]
     paths:
       - 'frontend/**'
+      - 'fixtures/**'
+      - 'scripts/check-fixtures-sync.sh'
       - '.github/workflows/frontend.yml'
   pull_request:
     paths:
       - 'frontend/**'
+      - 'fixtures/**'
+      - 'scripts/check-fixtures-sync.sh'
       - '.github/workflows/frontend.yml'
 
 concurrency:
@@ -24,6 +28,9 @@ jobs:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v4
+      - name: Fixtures in sync with the frontend copy
+        working-directory: .
+        run: bash scripts/check-fixtures-sync.sh
 
       - uses: actions/setup-node@v4
         with:
