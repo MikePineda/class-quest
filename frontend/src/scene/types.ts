@@ -26,7 +26,14 @@ export interface Point {
   y: number
 }
 
-/** One chapter, rendered as a room the player walks through. */
+/**
+ * One chapter, rendered as a room the player walks through.
+ *
+ * A hub map emits exactly one Room covering the whole interior. That is
+ * load-bearing: `WorldCanvas.buildRoomIndex` assigns every unclaimed tile to the
+ * nearest room centre, so with a single room the floor, walls and tint all
+ * render. Carve a second room and the tiles outside both rects go black.
+ */
 export interface Room {
   chapterId: string
   title: string
@@ -58,6 +65,38 @@ export interface DecorPlacement {
   at: Point
 }
 
+/** One mode of learning, standing at the edge of the hub. */
+export type PortalKind = 'storybook' | 'quiz' | 'explain' | 'sealed'
+
+/** Tile rect. Inclusive of x/y, exclusive of x+w / y+h. */
+export interface Rect {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+/**
+ * A doorway into one mode of learning.
+ *
+ * Unlike `SceneNode` a portal carries no content: the panel behind it reads the
+ * Game or the CourseGraph directly. That is why portals live in their own array
+ * rather than in a union with `SceneNode` — every existing loop over `nodes`
+ * stays correct and untouched on a hub map, which emits `nodes: []`.
+ */
+export interface PortalNode {
+  kind: PortalKind
+  label: string
+  /** One line, shown in the walk-up prompt. */
+  blurb: string
+  /** The floor tile the arch stands on. Art is drawn centred here. */
+  at: Point
+  /** Standing anywhere in here counts as being at the portal. */
+  hotspot: Rect
+  /** No content behind it, or content that failed to generate. Draws greyed. */
+  locked: boolean
+}
+
 export interface WorldMap {
   /** Mirrors the Game it was built from, so a renderer can label the world. */
   gameId: string
@@ -69,6 +108,11 @@ export interface WorldMap {
   rooms: Room[]
   nodes: SceneNode[]
   decor: DecorPlacement[]
+  /**
+   * Modes of learning around the hub. Empty on a legacy chapter map, which is
+   * what keeps every `nodes` loop valid without narrowing a union.
+   */
+  portals: PortalNode[]
   /** Where the player starts. Always a floor tile inside the first room. */
   spawn: Point
 }

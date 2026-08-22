@@ -20,7 +20,7 @@
  */
 
 import type { Actor, Background, Prop } from '../api/types'
-import type { ActorArt, ActorArts, Anim, Biome, Biomes, PropArt, PropArts, Still } from './types'
+import type { ActorArt, ActorArts, Anim, Biome, Biomes, PortalKind, PropArt, PropArts, Still } from './types'
 
 /** Terrain and decor are authored at 16px wide; only the tall pieces differ in height. */
 const still = (src: string, w: number, h: number): Still => ({ src, w, h })
@@ -136,4 +136,47 @@ export function actorArt(a: Actor): ActorArt {
 
 export function propArt(p: Prop): PropArt {
   return PROPS[p]
+}
+
+// --- portals ----------------------------------------------------------------
+// Deliberately NOT part of the `Prop` enum. A portal is a client-side idea about
+// how a world is navigated; `schema/game.schema.json` is the law and has no
+// business knowing about it. Keeping this table separate also means it carries
+// colours, which the schema would never model.
+//
+// The art is composited: a real sprite for the masonry, light drawn in code.
+// The sprite pack contains nothing emissive and no coloured variants, so there
+// is nothing to cut for a glow — and code-drawn light gives colour and
+// animation as parameters. `chart_frame` already set this precedent.
+
+export interface PortalArt {
+  /** Real pixel art under the glow: the stone arch. */
+  frame: Still
+  /** Flanking light source, or null for a portal that gives off none. */
+  lantern: Still | null
+  /** Bright inner fill of the doorway. */
+  core: string
+  /** Ground pool and shimmer. Low alpha; drawn with `lighter`. */
+  glow: string
+  /** One-pixel outline. Load-bearing: it is the edge that survives the biome tint multiply. */
+  rim: string
+  /** An 8x8 geometric glyph bobbing above the arch. Drawn, never typeset. */
+  icon: 'book' | 'question' | 'speech' | 'lock'
+}
+
+const arch: Still = { src: '/sprites/props/doorway_pair.png', w: 32, h: 32 }
+const lantern: Still = { src: '/sprites/props/lantern.png', w: 16, h: 32 }
+
+export const PORTALS: Record<PortalKind, PortalArt> = {
+  // Amber is the app's primary, so the reading gate feels like home.
+  storybook: { frame: arch, lantern, core: '#f59e0b', glow: 'rgba(245,158,11,0.50)', rim: '#ffc174', icon: 'book' },
+  quiz: { frame: arch, lantern, core: '#ef4444', glow: 'rgba(239,68,68,0.50)', rim: '#ff8a8a', icon: 'question' },
+  // Teal is the app's secondary and reads as the calmest of the three, which
+  // suits the gate where you talk rather than answer.
+  explain: { frame: arch, lantern, core: '#4fdbc8', glow: 'rgba(79,219,200,0.50)', rim: '#8ef0e2', icon: 'speech' },
+  sealed: { frame: arch, lantern: null, core: '#6b7280', glow: 'rgba(107,114,128,0.30)', rim: '#9aa1ad', icon: 'lock' },
+}
+
+export function portalArt(kind: PortalKind): PortalArt {
+  return PORTALS[kind]
 }
