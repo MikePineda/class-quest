@@ -7,6 +7,10 @@ from it: a story-driven **Quest**, a timed **Gauntlet**, and **Explain to Win**.
 Minecraft analogy: you create or join a **server** (a class) with a join code; a server holds
 several **worlds** (one per topic cluster of the uploaded material); every world has the three modes.
 
+**Live:** [classquest.net](https://classquest.net) · API [api.classquest.net](https://api.classquest.net)
+([Swagger](https://api.classquest.net/docs)) · demo login `demo@classquest.app` / `demo1234`,
+public server join code `DEMO01`.
+
 ## Repo layout
 
 | Path | What |
@@ -16,6 +20,7 @@ several **worlds** (one per topic cluster of the uploaded material); every world
 | `schema/` | The content contract (JSON Schema) + `validate.py` |
 | `fixtures/` | Hand-written demo content (overfitting) seeded as the public demo server |
 | `CONTRACTS.md` | API contract for the frontend, with JSON examples |
+| `docs/OPERATIONS.md` | **Deploy, environment, smoke tests, debugging — read this before touching prod** |
 | `docs/` | Proposal, research notes, alignment deck |
 
 ## Run it
@@ -45,9 +50,12 @@ python3 schema/validate.py           # fixtures vs contract
 
 ## Deploy
 
-Push to `main` → Dokploy builds and deploys two apps (`backend/Dockerfile` with repo-root
+`main` is deployed: work on a branch and open a PR. On merge, Dokploy builds and deploys two apps (`backend/Dockerfile` with repo-root
 context, `frontend/Dockerfile` with the `VITE_API_URL` build arg). GitHub Actions runs the
 checks above but does not deploy. Domains, secrets and CORS origins are environment only.
 
 Setting a real LLM key: `LLM_API_KEY` in `backend/.env` locally and in the Dokploy env panel.
 Smoke test: `cd backend && .venv/bin/python -m scripts.llm_spike`.
+
+Full operational detail — build contexts, the volume, TLS, the two deploy traps that have
+already bitten us, and how to read a failed deploy — is in [`docs/OPERATIONS.md`](docs/OPERATIONS.md).
