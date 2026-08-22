@@ -28,12 +28,24 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, ApiError } from '../api/client'
-import type { AttemptOut, CourseGraph, Game, Option, PredictionScene, Scene, SceneProgress } from '../api/types'
+import type {
+  AttemptOut,
+  CourseGraph,
+  ExplainOut,
+  Game,
+  Option,
+  PredictionScene,
+  Scene,
+  SceneProgress,
+} from '../api/types'
 import { fixtureGauntlet, fixtureGraph, fixtureQuest } from '../fixtures'
+import { clearedPortals, worldCleared } from './gating'
 import { buildHub } from './hubgen'
 import type { HubPortalSpec } from './hubgen'
 import { conceptTrail, diagnose } from './pedagogy'
+import { ExplainPanel } from './ExplainPanel'
 import { QuizPanel } from './QuizPanel'
+import { StorybookPanel } from './StorybookPanel'
 import {
   DiagnosisStage,
   EvidenceStage,
@@ -97,8 +109,55 @@ interface Session {
   outcomes: Record<string, SceneOutcome>
   /** Server-side history, so a reload does not erase what the learner already did. */
   restored: Record<string, SceneProgress>
+  /**
+   * Concepts the learner has already explained well enough to be recorded.
+   * Written by the server, so this is the one portal whose progress is real —
+   * the explain gate opens on the first concept not in here.
+   */
+  explained: ReadonlySet<string>
+  /**
+   * Concepts whose storybook page has been opened. The server has no field for
+   * this, so it is a browser-side read receipt and nothing more: it records
+   * that a page was on screen, never that it was understood. It survives a
+   * reload through `localStorage` only — see `readStorage`.
+   */
+  read: ReadonlySet<string>
   /** World XP as the server knows it. Null means there is nothing honest to show. */
   xp: number | null
+}
+
+/** One entry per world, so opening another course cannot inherit its reading. */
+const readStorageKey = (worldId: string) => `cq.portals.${worldId}`
+
+/**
+ * Reading progress from a previous visit.
+ *
+ * Every path returns a set: a private window throws on `localStorage`, blocked
+ * site data returns null, and a hand-edited entry can be any JSON at all. None
+ * of those may stop a world from rendering, so all of them read as "nothing
+ * read yet". The fixture world has no id and is never persisted.
+ */
+function loadRead(worldId: string | undefined): ReadonlySet<string> {
+  if (!worldId) return new Set<string>()
+  try {
+    const raw = window.localStorage.getItem(readStorageKey(worldId))
+    if (!raw) return new Set<string>()
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return new Set<string>()
+    return new Set(parsed.filter((entry): entry is string => typeof entry === 'string'))
+  } catch {
+    return new Set<string>()
+  }
+}
+
+/** Best effort: losing the receipt costs a re-read, and never a broken world. */
+function saveRead(worldId: string | undefined, read: ReadonlySet<string>): void {
+  if (!worldId) return
+  try {
+    window.localStorage.setItem(readStorageKey(worldId), JSON.stringify([...read]))
+  } catch {
+    /* no storage in this browser session; the reading still works, it just does not survive */
+  }
 }
 
 const freshSession = (key: string | undefined): Session => ({
@@ -107,6 +166,10 @@ const freshSession = (key: string | undefined): Session => ({
   correct: new Set<string>(),
   outcomes: {},
   restored: {},
+  explained: new Set<string>(),
+  // Hydrated here rather than in an effect so the first render already has it:
+  // an effect would have to race the effect that writes the set back.
+  read: loadRead(key),
   xp: null,
 })
 
@@ -151,7 +214,7 @@ export function WorldExperience({ worldId }: WorldExperienceProps) {
 
   const [stored, setStored] = useState<Session>(() => freshSession(worldId))
   const session = stored.key === worldId ? stored : freshSession(worldId)
-  const { completed, correct, xp } = session
+  const { completed, correct, explained, read, xp } = session
   const [openPortal, setOpenPortal] = useState<PortalKind | null>(null)
 
   /** Patch the session, discarding whatever belonged to a world we left. */
@@ -179,7 +242,10 @@ export function WorldExperience({ worldId }: WorldExperienceProps) {
           setFetched({ id: worldId, value: { status: 'empty', title: detail.title } })
           return
         }
-        updateSession(() => ({ xp: detail.my_progress.xp }))
+        updateSession(() => ({
+          xp: detail.my_progress.xp,
+          explained: new Set(detail.my_progress.explained_concept_ids),
+        }))
         setFetched({
           id: worldId,
           value: { status: 'ready', game: quest, gauntlet: detail.games.gauntlet, graph: detail.graph },
@@ -220,6 +286,15 @@ export function WorldExperience({ worldId }: WorldExperienceProps) {
           // generator, not something either schema guarantees — key this map by
           // `archetype + scene_id` the day a generated world proves it wrong.
           restored: Object.fromEntries(answered.map((scene) => [scene.scene_id, scene])),
+          // Unioned for the same reason `correct` is: this reply can land after
+          // a conversation the learner just finished, and explaining something
+          // is never undone.
+          explained: new Set([
+            ...current.explained,
+            ...progress.explanations
+              .filter((record) => record.verdict !== 'fail')
+              .map((record) => record.concept_id),
+          ]),
           xp: progress.xp,
         }))
       })
@@ -318,12 +393,51 @@ export function WorldExperience({ worldId }: WorldExperienceProps) {
   )
 
   /**
-   * Gates the learner has finished. Empty for now: the real derivation
-   * (`gating.ts` — storybook read receipts, the quiz pass ratio, and
-   * `explained_concept_ids`) is a later task. The prop is plumbed through to the
-   * canvas anyway so that task only has to change this one expression.
+   * The two lists `gating` reads out of the content, each memoised on the
+   * payload it comes from. Inline `.map(...)` calls would hand `clearedPortals`
+   * a new array on every render, and the `Set` it feeds ends up on
+   * `WorldCanvas`, whose effects key on identity — the same trap `portalSpecs`
+   * documents above.
    */
-  const cleared = useMemo<ReadonlySet<PortalKind>>(() => new Set<PortalKind>(), [])
+  const conceptIds = useMemo(() => graph?.concepts.map((concept) => concept.id) ?? [], [graph])
+  // Prediction scenes only, matching what `QuizPanel` actually asks: a dialogue
+  // scene has no answer to grade and would raise the bar it can never clear.
+  const quizSceneIds = useMemo(
+    () =>
+      gauntlet
+        ? gauntlet.chapters.flatMap((chapter) =>
+            chapter.scenes.filter((scene) => scene.type === 'prediction').map((scene) => scene.id),
+          )
+        : [],
+    [gauntlet],
+  )
+
+  /**
+   * Which portals count as finished. Browser-side by construction — read the
+   * note at the top of `gating.ts` — so it drives pips, the canvas and copy,
+   * and nothing that claims to be a result: XP stays the server's word.
+   */
+  const clearState = useMemo(
+    () =>
+      clearedPortals({
+        conceptIds,
+        readConceptIds: read,
+        quizSceneIds,
+        correctSceneIds: correct,
+        explainedConceptIds: explained,
+      }),
+    [conceptIds, read, quizSceneIds, correct, explained],
+  )
+
+  const cleared = useMemo<ReadonlySet<PortalKind>>(() => {
+    const kinds = new Set<PortalKind>()
+    if (clearState.storybook) kinds.add('storybook')
+    if (clearState.quiz) kinds.add('quiz')
+    if (clearState.explain) kinds.add('explain')
+    return kinds
+  }, [clearState])
+
+  const allCleared = worldCleared(clearState)
 
   /**
    * The trail reads the gauntlet, not the quest. With the quest no longer
@@ -415,6 +529,45 @@ export function WorldExperience({ worldId }: WorldExperienceProps) {
     },
     [updateSession],
   )
+
+  /**
+   * The AI student finally understood something.
+   *
+   * Both numbers come from the server: the XP was awarded when the last turn
+   * was graded, and the concept is now in `explained_concept_ids`, so nothing
+   * here is invented. Recording it locally only saves a round trip — a reload
+   * rebuilds the same set from `GET /progress`.
+   */
+  const onExplained = useCallback(
+    (result: ExplainOut) => {
+      updateSession((current) => ({
+        xp: result.world_xp,
+        explained: new Set([...current.explained, result.concept.id]),
+      }))
+    },
+    [updateSession],
+  )
+
+  /**
+   * A storybook page was opened.
+   *
+   * `StorybookPanel` fires this for whichever concept is on screen, including
+   * the one it opens on, so it arrives again for a page already read: the
+   * updater returns `null` in that case, keeping the set's identity stable —
+   * `cleared` is derived from it and the canvas keys its effects on identity.
+   */
+  const markRead = useCallback(
+    (conceptId: string) => {
+      updateSession((current) => (current.read.has(conceptId) ? null : { read: new Set([...current.read, conceptId]) }))
+    },
+    [updateSession],
+  )
+
+  // Written from an effect rather than from the updater above, which must stay
+  // pure. The first run rewrites what `loadRead` just read, which is harmless.
+  useEffect(() => {
+    saveRead(worldId, read)
+  }, [worldId, read])
 
   const close = useCallback(() => {
     setOpenPortal(null)
@@ -575,6 +728,15 @@ export function WorldExperience({ worldId }: WorldExperienceProps) {
               {clearedCount} / {gates.length} portals cleared
             </p>
           </div>
+          {/* A quiet full house, and deliberately nothing more: it blocks
+              nothing, unlocks nothing and awards nothing. It says the learner
+              has been through all three portals, which is exactly what the
+              browser can know — see the note at the top of `gating.ts`. */}
+          {allCleared && (
+            <p className="mt-2 text-xs font-bold text-primary-soft" aria-live="polite">
+              You have been through all three portals — read, answered and explained. Nice run.
+            </p>
+          )}
         </div>
 
         {/* The trail rides beside the canvas, not inside the overlay: the
@@ -594,8 +756,10 @@ export function WorldExperience({ worldId }: WorldExperienceProps) {
           </div>
           {trail.length > 0 && (
             <div className="pointer-events-auto mt-auto hidden w-full md:block">
-              {/* No active concept while the gates are placeholders: the panels
-                  that know which concept is on screen are tasks A2/A3/B3. */}
+              {/* No active concept: which one is on screen is known inside an
+                  open portal, and the trail is what the walker reads between
+                  them. Hoisting that state here would buy a highlight and cost
+                  a re-render of the world on every page turn. */}
               <WorldConceptTrail trail={trail} />
             </div>
           )}
@@ -675,69 +839,26 @@ export function WorldExperience({ worldId }: WorldExperienceProps) {
                   onRetry={retryScenes}
                   onClose={close}
                 />
+              ) : openNode.kind === 'explain' && graph ? (
+                <ExplainPanel
+                  worldId={worldId ?? null}
+                  graph={graph}
+                  explained={explained}
+                  onCleared={onExplained}
+                  onClose={close}
+                />
+              ) : openNode.kind === 'storybook' ? (
+                <StorybookPanel graph={graph} readIds={read} onRead={markRead} onClose={close} />
               ) : (
-                <GatePreview portal={openNode} graph={graph} gauntlet={gauntlet} onClose={close} />
+                // Only `sealed` reaches here, and it is locked, so nothing can
+                // open it: no keyboard path, no click path. The branch exists so
+                // the switch is total.
+                null
               )}
             </div>
           </section>
         </div>
       )}
-    </div>
-  )
-}
-
-/**
- * Placeholder bodies for the gates that have no panel yet, and nothing more.
- *
- * Each branch is the seam the real panel mounts into:
- *   - `storybook` → `StorybookPanel graph={graph}` — task A3.
- *   - `quiz`      → done: `QuizPanel` mounts above and this branch is only
- *                   reached when the gauntlet is missing, which also locks the
- *                   portal, so in practice it is unreachable.
- *   - `explain`   → `ExplainPanel` over `POST /worlds/{id}/explain/turn` — task B3.
- *   - `sealed`    → never. It is locked, so this branch is unreachable from the
- *                   keyboard and exists only so the switch is total.
- *
- * The counts are read from the real content rather than invented: a placeholder
- * that lies about what is behind the door is worse than no placeholder.
- */
-function GatePreview({
-  portal,
-  graph,
-  gauntlet,
-  onClose,
-}: {
-  portal: PortalNode
-  graph: CourseGraph | null
-  gauntlet: Game | null
-  onClose: () => void
-}) {
-  const concepts = graph?.concepts.length ?? 0
-  const questions = gauntlet ? gauntlet.chapters.reduce((sum, chapter) => sum + chapter.scenes.length, 0) : 0
-
-  const waiting =
-    portal.kind === 'storybook'
-      ? `${concepts} ${concepts === 1 ? 'concept' : 'concepts'} extracted from the source, with their misconceptions and verified quotes.`
-      : portal.kind === 'quiz'
-        ? `${questions} ${questions === 1 ? 'question' : 'questions'} generated from this course, graded by the server.`
-        : portal.kind === 'explain'
-          ? `A student who knows nothing about these ${concepts} ${concepts === 1 ? 'concept' : 'concepts'} and keeps asking why.`
-          : 'Nothing yet.'
-
-  return (
-    <div>
-      <div
-        className="grid min-h-32 place-items-center rounded-xl border border-dashed bg-background/40 px-6 py-8 text-center"
-        style={{ borderColor: portalArt(portal.kind).glow }}
-      >
-        <div>
-          <p className="eyebrow text-ink-muted">Coming next</p>
-          <p className="mt-3 text-sm leading-6 text-ink">{waiting}</p>
-        </div>
-      </div>
-      <button className="button-primary mt-6" onClick={onClose}>
-        Back to the hub
-      </button>
     </div>
   )
 }
