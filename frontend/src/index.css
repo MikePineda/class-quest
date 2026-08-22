@@ -11,8 +11,21 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-button {
+button,
+input,
+textarea,
+select {
   font: inherit;
+}
+
+.bg-app-grid {
+  background-color: #0b1326;
+  background-image:
+    radial-gradient(circle at 12% 8%, rgba(245, 158, 11, 0.1), transparent 25rem),
+    radial-gradient(circle at 88% 25%, rgba(79, 219, 200, 0.08), transparent 28rem),
+    linear-gradient(rgba(255, 255, 255, 0.016) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.016) 1px, transparent 1px);
+  background-size: auto, auto, 32px 32px, 32px 32px;
 }
 
 .bg-quest-grid {
@@ -42,7 +55,23 @@ button {
 }
 
 .eyebrow {
-  @apply text-xs font-extrabold uppercase tracking-[0.19em] text-primary-soft;
+  @apply text-xs font-extrabold uppercase tracking-[0.18em] text-primary-soft;
+}
+
+.field-label {
+  @apply mb-2 block text-sm font-bold text-ink;
+}
+
+.field {
+  @apply w-full rounded-xl border border-white/10 bg-surface-high px-4 py-3 text-ink outline-none transition placeholder:text-ink-muted/45 focus:border-secondary/60 focus:ring-2 focus:ring-secondary/15;
+}
+
+.button-primary {
+  @apply inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-5 py-3 text-sm font-extrabold text-background shadow-lg shadow-primary/10 transition hover:bg-primary-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-soft focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-45;
+}
+
+.button-secondary {
+  @apply inline-flex min-h-11 items-center justify-center rounded-xl border border-white/15 bg-surface-high px-4 py-2.5 text-sm font-bold text-ink transition hover:border-white/30 hover:bg-surface-highest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-45;
 }
 
 .status-dot {
