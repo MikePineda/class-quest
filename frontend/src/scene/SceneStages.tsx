@@ -6,6 +6,10 @@
  * canvas, no player, no load machine, no session. That is what lets a portal
  * panel and the map overlay show the same scene without either one
  * reimplementing the teaching loop.
+ *
+ * Every string in here is read by a first-year student who has never seen our
+ * schema. Field names (`prediction`, `misconception`, `source_span`) and
+ * archetype names (`gauntlet`) stay in the code and out of the screen.
  */
 
 import type { ReactNode } from 'react'
@@ -37,9 +41,20 @@ export interface SceneOutcome {
 /** The overlay is staged so the learner commits before being taught. */
 export type Stage = 'prediction' | 'diagnosis' | 'evidence'
 
+/** A quote lifted from the learner's own upload, ready to render. */
+export interface SourceQuoteProps {
+  quote: string
+  segment: number
+  title: string | null
+}
+
 /**
- * The gate. Options lock the moment the learner commits, and committing is a
- * separate button because owning the guess is what makes the correction land.
+ * The question. Options lock the moment the learner locks their answer in, and
+ * locking in is a separate button because owning the guess is what makes the
+ * correction land.
+ *
+ * `onContinue` is optional: when the result is shown on the same screen there is
+ * nothing to continue to, and the panel ends at the locked options.
  */
 export function PredictionStage({
   scene,
@@ -56,18 +71,19 @@ export function PredictionStage({
   committing: boolean
   onSelect: (optionId: string) => void
   onCommit: (scene: PredictionScene, option: Option) => void
-  onContinue: () => void
+  onContinue?: () => void
 }) {
   const committed = outcome !== null
   const chosenId = outcome?.optionId ?? selectedId
 
   return (
     <div>
-      <p className="eyebrow">Prediction gate</p>
-      <h3 className="mt-3 text-xl font-black leading-tight text-ink sm:text-2xl">{scene.prompt}</h3>
-      <p className="mt-3 text-sm leading-6 text-ink-muted">
-        Answer before you are taught. Commit to the one that feels most defensible — a wrong turn is the useful part.
-      </p>
+      <h3 className="text-xl font-black leading-tight text-ink sm:text-2xl">{scene.prompt}</h3>
+      {!committed && (
+        <p className="mt-3 text-sm leading-6 text-ink-muted">
+          Answer first, then see the explanation. Pick the one you think is right — getting it wrong is useful too.
+        </p>
+      )}
       <ul className="mt-5 space-y-3" aria-busy={committing}>
         {scene.options.map((option, index) => (
           <li key={option.id}>
@@ -82,8 +98,8 @@ export function PredictionStage({
           </li>
         ))}
       </ul>
-      <div className="mt-7 flex flex-wrap items-center gap-4" aria-live="polite">
-        {!committed ? (
+      {!committed ? (
+        <div className="mt-7 flex flex-wrap items-center gap-4" aria-live="polite">
           <button
             className="button-primary"
             disabled={!selectedId || committing}
@@ -92,39 +108,43 @@ export function PredictionStage({
               if (option) onCommit(scene, option)
             }}
           >
-            {committing ? 'Committing…' : 'Commit answer'}
+            {committing ? 'Locking in…' : 'Lock in answer'}
           </button>
-        ) : (
-          <>
-            <span
-              className={`rounded-full px-3 py-1.5 text-sm font-bold ${
-                outcome.diagnosis.correct ? 'bg-secondary/10 text-secondary' : 'bg-primary/10 text-primary-soft'
-              }`}
-            >
-              {outcome.diagnosis.correct ? 'Prediction logged' : 'Wrong turn captured'}
-            </span>
-            <RewardNote outcome={outcome} />
+        </div>
+      ) : (
+        // Collapses to nothing when there is no reward line and no next step,
+        // so the merged result screen does not open with a band of dead space.
+        <div className="mt-6 flex flex-wrap items-center gap-4 empty:mt-0" aria-live="polite">
+          <RewardNote outcome={outcome} />
+          {onContinue && (
             <button className="button-primary" onClick={onContinue}>
-              Inspect the result
+              See how you did
             </button>
-          </>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
 
 /**
- * The three-part correction: the belief the learner just showed, why it was
- * tempting, and what is true instead. Panels missing from the data are omitted
- * rather than filled with plausible-sounding text of our own.
+ * The correction: what the learner thought, why it was tempting, what is
+ * actually true — and, when the caller passes one, the quote from the learner's
+ * own material underneath it.
+ *
+ * Anything missing from the data is omitted rather than filled with
+ * plausible-sounding text of our own. That includes the quote: `evidence` is
+ * rendered only when the caller hands one over, so a panel that shows the quote
+ * on its own screen does not print it twice.
  */
 export function DiagnosisStage({
   diagnosis,
+  evidence = null,
   onContinue,
   continueLabel,
 }: {
   diagnosis: Diagnosis
+  evidence?: SourceQuoteProps | null
   onContinue: () => void
   continueLabel: string
 }) {
@@ -133,12 +153,15 @@ export function DiagnosisStage({
     !diagnosis.correct &&
     misconception !== null &&
     (filled(misconception.statement) || filled(misconception.why_plausible) || filled(misconception.correction))
+  // "There is a quote somewhere" and "render the quote here" are different
+  // questions: the first is about the data, the second is the caller's layout.
+  const hasSource = diagnosis.evidence !== null && filled(diagnosis.evidence.quote)
+  const showSource = evidence !== null && filled(evidence.quote)
 
   return (
     <div>
-      <p className="eyebrow">Misconception diagnosis</p>
-      <h3 className="mt-3 text-2xl font-black text-ink sm:text-3xl">
-        {diagnosis.correct ? 'Signal recognised.' : 'Wrong turn detected.'}
+      <h3 className="text-2xl font-black text-ink sm:text-3xl">
+        {diagnosis.correct ? "That's right." : 'Not quite.'}
       </h3>
       {diagnosis.concept && (
         <p className="mt-2 text-sm font-semibold text-ink-muted">Concept · {diagnosis.concept.label}</p>
@@ -147,13 +170,13 @@ export function DiagnosisStage({
       {showPanels ? (
         <div className="mt-6 space-y-4" aria-live="polite">
           {filled(misconception.statement) && (
-            <Insight label="The belief you committed to" text={misconception.statement} tone="amber" />
+            <Insight label="You thought" text={misconception.statement} tone="amber" />
           )}
           {filled(misconception.why_plausible) && (
-            <Insight label="Why it felt plausible" text={misconception.why_plausible} />
+            <Insight label="Why that's tempting" text={misconception.why_plausible} />
           )}
           {filled(misconception.correction) && (
-            <Insight label="What is true instead" text={misconception.correction} tone="teal" />
+            <Insight label="What's actually true" text={misconception.correction} tone="teal" />
           )}
         </div>
       ) : filled(diagnosis.reveal) ? (
@@ -168,25 +191,31 @@ export function DiagnosisStage({
               diagnosis.correct ? 'text-secondary' : 'text-primary-soft'
             }`}
           >
-            {diagnosis.correct ? 'Reasoning confirmed' : 'What is true instead'}
+            {diagnosis.correct ? "Why that's right" : "What's actually true"}
           </p>
           <p className="mt-2 leading-7 text-ink">{diagnosis.reveal}</p>
         </div>
-      ) : diagnosis.evidence && filled(diagnosis.evidence.quote) ? (
+      ) : hasSource ? (
         <p className="mt-6 leading-7 text-ink-muted">
-          This scene has no written explanation attached. What the course itself says is quoted next.
+          No explanation was written for this question. Here is what your own notes say.
         </p>
       ) : (
         // Promising a source here when none was extracted is the one lie this
-        // screen must never tell: the whole point of the evidence step is that
-        // the learner can check the claim against their own material.
+        // screen must never tell: the whole point of the quote is that the
+        // learner can check the claim against their own material.
         <p className="mt-6 leading-7 text-ink-muted">
-          This scene has no written explanation attached, and no source quote was extracted for this concept.
+          No explanation was written for this question, and nothing from your notes was matched to it.
         </p>
       )}
 
       {showPanels && filled(diagnosis.reveal) && (
         <p className="mt-5 border-l-2 border-white/15 pl-4 leading-7 text-ink-muted">{diagnosis.reveal}</p>
+      )}
+
+      {showSource && (
+        <div className="mt-6">
+          <SourceQuote quote={evidence.quote} segment={evidence.segment} title={evidence.title} />
+        </div>
       )}
 
       <button className="button-primary mt-7" onClick={onContinue}>
@@ -206,43 +235,44 @@ export function Insight({ label, text, tone = 'neutral' }: { label: string; text
   )
 }
 
-/** The receipt: the exact sentence from the learner's own upload that settles it. */
+/**
+ * The exact sentence from the learner's own upload that settles it.
+ *
+ * Quiet on purpose: it sits under the correction rather than competing with it.
+ * Nothing here is written by us — the quote is verbatim and the caption only
+ * says where it came from.
+ */
+export function SourceQuote({ quote, segment, title }: SourceQuoteProps) {
+  return (
+    <figure className="rounded-xl border border-secondary/25 bg-background/45 p-5">
+      <figcaption className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-[0.17em] text-secondary">
+        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+          <path d="M5 4h10a4 4 0 0 1 4 4v12H9a4 4 0 0 1-4-4V4Z" />
+          <path d="M9 20a4 4 0 0 1 4-4h6M9 8h6M9 12h7" />
+        </svg>
+        From your notes
+      </figcaption>
+      <blockquote className="mt-3 leading-7 text-ink">“{quote}”</blockquote>
+      <p className="mt-3 text-xs font-semibold text-ink-muted">
+        {title ? `${title} · ` : ''}Section {segment}
+      </p>
+    </figure>
+  )
+}
+
+/** The quote on a screen of its own, for the panels that still step through it. */
 export function EvidenceStage({
   quote,
   segment,
   title,
   onContinue,
-}: {
-  quote: string
-  segment: number
-  title: string | null
-  onContinue: () => void
-}) {
+}: SourceQuoteProps & { onContinue: () => void }) {
   return (
     <div>
-      <p className="eyebrow">Verified source receipt</p>
-      <h3 className="mt-3 text-2xl font-black text-ink sm:text-3xl">Straight from your own material.</h3>
-      <figure className="relative mt-6 overflow-hidden rounded-2xl border border-secondary/30 bg-background/45 p-6 sm:p-7">
-        <div
-          className="absolute right-0 top-0 h-28 w-28 -translate-y-8 translate-x-8 rounded-full bg-secondary/10 blur-2xl"
-          aria-hidden="true"
-        />
-        <div className="flex items-center gap-3 text-secondary">
-          <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-            <path d="M5 4h10a4 4 0 0 1 4 4v12H9a4 4 0 0 1-4-4V4Z" />
-            <path d="M9 20a4 4 0 0 1 4-4h6M9 8h6M9 12h7" />
-          </svg>
-          <span className="text-xs font-extrabold uppercase tracking-[0.18em]">Exact course excerpt</span>
-        </div>
-        <blockquote className="mt-5 text-lg font-semibold leading-8 text-ink sm:text-xl">“{quote}”</blockquote>
-        <figcaption className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-white/10 pt-4 text-sm">
-          {title && <span className="font-bold text-ink">{title}</span>}
-          <span className="font-mono text-secondary">Segment {segment}</span>
-          <span className="ml-auto rounded-full border border-secondary/25 bg-secondary/10 px-3 py-1 text-xs font-bold text-secondary">
-            Source matched
-          </span>
-        </figcaption>
-      </figure>
+      <h3 className="text-2xl font-black text-ink sm:text-3xl">Straight from your own material.</h3>
+      <div className="mt-6">
+        <SourceQuote quote={quote} segment={segment} title={title} />
+      </div>
       <button className="button-primary mt-7" onClick={onContinue}>
         Back to the world
       </button>
@@ -282,12 +312,12 @@ export function OptionButton({
   index: number
   chosen: boolean
   locked: boolean
-  /** The graded verdict for the chosen option. Null before the commit. */
+  /** Whether the chosen option was right. Null before the answer is locked in. */
   correct: boolean | null
   onSelect: () => void
 }) {
-  // Before the commit the only signal is selection; after it, the chosen option
-  // is marked by the server's verdict and the right answer is revealed.
+  // Before the answer is locked in the only signal is selection; after it, the
+  // chosen option is marked by the server's grade and the right answer is shown.
   const chosenRight = chosen && correct === true
   const tone = !locked
     ? chosen
