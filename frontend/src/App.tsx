@@ -5,11 +5,16 @@ import { DemoExperience } from './demo/DemoExperience'
 import { AuthScreen } from './foundation/AuthScreen'
 import { ProfileScreen } from './foundation/ProfileScreen'
 import { ServerHub } from './foundation/ServerHub'
+import { WorldExperience } from './scene/WorldExperience'
 
 type Screen = 'profile' | 'servers'
 
 export default function App() {
   if (window.location.pathname === '/demo') return <DemoExperience />
+
+  // `/world/<id>` walks a real generated world; bare `/world` walks the fixture.
+  const world = window.location.pathname.match(/^\/world(?:\/([^/]+))?\/?$/)
+  if (world) return <WorldExperience worldId={world[1] ? decodeURIComponent(world[1]) : undefined} />
 
   return <FoundationApp />
 }
