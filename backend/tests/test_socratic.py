@@ -6,7 +6,7 @@ generated questions, not about a stub.
 """
 import pytest
 
-from app.services import explain, fixtures, scoring, socratic
+from app.services import explain, fixtures, llm, prompts, scoring, socratic
 
 OUT_KEYS = {"done", "understanding", "verdict", "question", "targeted_misconception_id",
             "turns_remaining", "feedback", "misconception_id"}
@@ -264,3 +264,127 @@ def test_malformed_concept_never_raises():
         out = socratic.fixture_turn(bad, [_learner("Something long enough to be graded.")])
         assert set(out) == OUT_KEYS
         assert out["question"] or out["done"]
+
+
+# --- live model path -------------------------------------------------------
+
+
+@pytest.fixture
+def llm_on(monkeypatch):
+    """next_turn must not short-circuit into fixture mode in these tests."""
+    monkeypatch.setattr(llm.settings, "llm_api_key", "test-key")
+
+
+def _install(monkeypatch, *responses):
+    calls = []
+    queue = list(responses)
+
+    def fake(system, user, **kw):
+        calls.append({"system": system, "user": user, **kw})
+        item = queue.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    monkeypatch.setattr(socratic.llm, "call_json", fake)
+    return calls
+
+
+def test_fixture_mode_still_takes_the_fixture_path(concept, monkeypatch):
+    """Empty LLM_API_KEY is the CI path and the demo default."""
+    assert not llm.settings.llm_enabled
+    def no_network(*a, **kw):  # pragma: no cover - must never run
+        raise AssertionError("fixture mode reached the network")
+
+    monkeypatch.setattr(socratic.llm, "_client", no_network)
+    turns = [_learner(DEMO[0]), _student("Why?"), _learner(DEMO[1])]
+    assert socratic.next_turn(concept, turns) == socratic.fixture_turn(concept, turns)
+
+
+def test_model_turn_is_normalised_and_asked_with_the_socratic_prompt(concept, llm_on, monkeypatch):
+    calls = _install(monkeypatch, {
+        "question": "So a perfect training score is not the finish line?",
+        "targeted_misconception_id": "high_train_high_test",
+        "misconception_id": None,
+        "understanding": 55,
+        "satisfied": False,
+        "feedback": "You named the mechanism; say what happens to the validation error.",
+    })
+    out = socratic.next_turn(concept, [_learner(DEMO[0])])
+    assert set(out) == OUT_KEYS
+    assert out["question"].startswith("So a perfect training score")
+    assert out["targeted_misconception_id"] == "high_train_high_test"
+    assert out["understanding"] == 55
+    assert out["verdict"] == scoring.verdict_for(55)
+    assert out["done"] is False
+
+    assert len(calls) == 1
+    expected = prompts.socratic_prompt(concept, [_learner(DEMO[0])])
+    assert (calls[0]["system"], calls[0]["user"]) == expected
+    assert calls[0]["max_tokens"] == 600
+    assert calls[0]["timeout"] == explain.settings.llm_explain_timeout_s
+
+
+def test_llm_error_falls_back_to_the_fixture_instead_of_raising(concept, llm_on, monkeypatch):
+    turns = [_learner(DEMO[0]), _student("Why?"), _learner(DEMO[1])]
+    _install(monkeypatch, llm.LLMError("APITimeoutError: boom"))
+    assert socratic.next_turn(concept, turns) == socratic.fixture_turn(concept, turns)
+
+
+def test_llm_format_error_falls_back_to_the_fixture_instead_of_raising(concept, llm_on, monkeypatch):
+    turns = [_learner(DEMO[0]), _student("Why?"), _learner(DEMO[1])]
+    _install(monkeypatch, llm.LLMFormatError("not an object"))
+    assert socratic.next_turn(concept, turns) == socratic.fixture_turn(concept, turns)
+
+
+def test_a_satisfied_model_cannot_end_the_chat_before_the_minimum_turns(concept, llm_on, monkeypatch):
+    reply = {
+        "question": "Got it.", "targeted_misconception_id": None, "misconception_id": None,
+        "understanding": 100, "satisfied": True, "feedback": "Perfect.",
+    }
+    _install(monkeypatch, reply)
+    out = socratic.next_turn(concept, [_learner(DEMO[0])])
+    assert scoring.MIN_LEARNER_TURNS == 2
+    assert out["done"] is False
+    assert out["question"]
+
+    _install(monkeypatch, reply)
+    out = socratic.next_turn(concept, [_learner(DEMO[0]), _student("Why?"), _learner(DEMO[1])])
+    assert out["done"] is True
+    assert out["question"] is None
+
+
+def test_model_understanding_is_clamped_and_floored(concept, llm_on, monkeypatch):
+    _install(monkeypatch, {"understanding": 999, "feedback": "x", "satisfied": False})
+    assert socratic.next_turn(concept, [_learner(DEMO[0])])["understanding"] == 100
+    _install(monkeypatch, {"understanding": "lots", "feedback": "x"})
+    assert socratic.next_turn(concept, [_learner(DEMO[0])])["understanding"] == 0
+    # No learner turn means nothing was understood, whatever the model claims.
+    _install(monkeypatch, {"understanding": 90, "feedback": "x"})
+    assert socratic.next_turn(concept, [])["understanding"] == 0
+
+
+def test_a_held_misconception_caps_the_model_score(concept, llm_on, monkeypatch):
+    held = concept["misconceptions"][0]["statement"]
+    _install(monkeypatch, {"understanding": 95, "satisfied": True, "feedback": "x"})
+    out = socratic.next_turn(concept, [_learner(held), _student("Why?"), _learner(held)])
+    assert out["understanding"] <= socratic._HELD_CAP
+    assert out["done"] is False
+
+
+def test_model_cannot_invent_a_misconception_id(concept, llm_on, monkeypatch):
+    _install(monkeypatch, {
+        "question": "Why?", "targeted_misconception_id": "made_up",
+        "misconception_id": "also_made_up", "understanding": 40, "feedback": "x",
+    })
+    out = socratic.next_turn(concept, [_learner(DEMO[0])])
+    assert out["targeted_misconception_id"] is None
+    assert out["misconception_id"] is None
+
+
+def test_a_garbage_model_reply_still_produces_a_usable_turn(concept, llm_on, monkeypatch):
+    for reply in ({}, {"question": "   "}, {"question": 7, "feedback": None}):
+        _install(monkeypatch, reply)
+        out = socratic.next_turn(concept, [_learner(DEMO[0])])
+        assert set(out) == OUT_KEYS
+        assert out["question"] and out["feedback"]

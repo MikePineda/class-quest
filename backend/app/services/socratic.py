@@ -24,7 +24,13 @@ The verdict is always recomputed from the clamped meter via
 `scoring.verdict_for` in `_normalize_turn`, exactly as `explain._normalize_grade`
 does — nothing outside this module, model or client, gets to assert it.
 """
-from app.services import explain, scoring
+import logging
+
+from app.config import get_settings
+from app.services import explain, llm, prompts, scoring
+
+log = logging.getLogger("classquest.socratic")
+settings = get_settings()
 
 _QUESTION_LIMIT = 400
 _FEEDBACK_LIMIT = 600
@@ -302,13 +308,46 @@ def fixture_turn(concept: dict, turns) -> dict:
     )
 
 
+# ------------------------------------------------------------------- model
+
+
 def next_turn(concept: dict, turns) -> dict:
     """One step of the conversation: what the student says next, how much it
     now understands, and whether it is done.
 
-    The live-model path (a Socratic prompt through `llm.call_json`, normalised
-    by `_normalize_turn` so the model's own `satisfied` stays advisory) is the
-    documented follow-up; today every call takes the fixture path, which is
-    what the demo and CI exercise.
+    The model writes the wording and proposes an advisory `understanding` and
+    `satisfied`; the meter, the verdict and the decision to stop are still
+    computed by `_normalize_turn`. Unlike `explain.grade_explanation`, which
+    raises `GraderUnavailable` and answers 503, every failure here falls back
+    to `fixture_turn`: a chat that dies mid-sentence on stage is worse than a
+    deterministic student, and the fixture path is always available.
     """
-    return fixture_turn(concept, turns)
+    system, user = prompts.socratic_prompt(concept, turns)
+    try:
+        raw = llm.call_json(
+            system, user, max_tokens=600, temperature=0.4,
+            timeout=settings.llm_explain_timeout_s,
+        )
+    except llm.FixtureMode:
+        return fixture_turn(concept, turns)
+    except (llm.LLMError, llm.LLMFormatError) as e:
+        log.warning("socratic: model turn failed (%s); falling back to the fixture student", e)
+        return fixture_turn(concept, turns)
+
+    a = _analyse(concept, turns)
+    understanding = scoring.clamp_score(raw.get("understanding") if isinstance(raw, dict) else 0)
+    # Server-side floors the model does not get to argue with: nothing said
+    # means nothing understood, and a learner who is still restating the wrong
+    # belief is capped exactly where `fixture_grade` caps them.
+    if not a["learner_count"]:
+        understanding = 0
+    if a["held"]:
+        understanding = min(understanding, _HELD_CAP)
+
+    return _normalize_turn(
+        concept,
+        raw,
+        learner_turns=a["learner_count"],
+        understanding=understanding,
+        satisfied=bool(raw.get("satisfied")) if isinstance(raw, dict) else False,
+    )
