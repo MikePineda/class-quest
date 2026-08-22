@@ -71,6 +71,20 @@ const KEY_VECTORS: Record<string, Point> = {
 /** Keys the browser would otherwise use to scroll the page under the canvas. */
 const SCROLL_KEYS = new Set(['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'spacebar'])
 
+/**
+ * True while the person is typing into something.
+ *
+ * These listeners are on `window`, so they see every keystroke in the document,
+ * including the ones meant for a textarea in a panel above the canvas. Without
+ * this check the space bar is swallowed by the anti-scroll `preventDefault` and
+ * the learner cannot put spaces in a sentence they are writing.
+ */
+function isTyping(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  const tag = target.tagName
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable
+}
+
 const isSolid = (map: WorldMap, x: number, y: number): boolean =>
   tileAt(map, Math.floor(x), Math.floor(y)) !== FLOOR
 
@@ -120,6 +134,8 @@ export function usePlayer(map: WorldMap | null, options: PlayerOptions = {}): Pl
     const keyName = (event: KeyboardEvent) => event.key.toLowerCase()
 
     const onKeyDown = (event: KeyboardEvent) => {
+      // Typing wins over walking, always. WASD is also ordinary prose.
+      if (isTyping(event.target)) return
       const key = keyName(event)
       // The page must never scroll under the world.
       if (SCROLL_KEYS.has(key)) event.preventDefault()
@@ -128,6 +144,8 @@ export function usePlayer(map: WorldMap | null, options: PlayerOptions = {}): Pl
     }
 
     const onKeyUp = (event: KeyboardEvent) => {
+      // Not gated on `isTyping`: a key held before focus moved into a field
+      // still has to be released, or the player walks into a wall forever.
       keys.delete(keyName(event))
     }
 
