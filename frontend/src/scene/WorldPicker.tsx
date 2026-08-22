@@ -168,9 +168,14 @@ function ServerGroup({ group }: { group: Group }) {
     <section className="rounded-2xl border border-white/10 bg-surface p-5">
       <div className="flex items-start justify-between gap-3">
         <h3 className="font-bold text-ink">{group.server.name}</h3>
-        <span className={`text-xs font-extrabold uppercase tracking-[0.12em] ${statusTone[group.server.status]}`}>
-          {group.server.status}
-        </span>
+        {/* A generation status is only news when it is not `ready`. Printing
+            READY beside every row on a screen that lists finished worlds tells
+            the learner nothing and invites them to read it as "completed". */}
+        {group.server.status !== 'ready' && (
+          <span className={`text-xs font-extrabold uppercase tracking-[0.12em] ${statusTone[group.server.status]}`}>
+            {group.server.status}
+          </span>
+        )}
       </div>
 
       {group.error && (
@@ -196,12 +201,45 @@ function ServerGroup({ group }: { group: Group }) {
   )
 }
 
-function WorldRow({ world }: { world: WorldSummary }) {
-  const badge = (
-    <span className={`text-xs font-extrabold uppercase tracking-[0.12em] ${statusTone[world.status]}`}>
-      {world.status}
+/**
+ * What the learner has actually done here, in the server's own numbers.
+ *
+ * `my_completion` is scenes attempted over scenes, and attempting is not
+ * getting it right — so this says "walked", never "mastered". Mastery lives in
+ * the world, where the answers are.
+ */
+function WorldProgress({ world }: { world: WorldSummary }) {
+  const walked = Math.round(Math.max(0, Math.min(1, world.my_completion)) * 100)
+  if (world.my_xp <= 0 && walked <= 0) {
+    return <span className="text-xs font-bold text-ink-muted">Not started</span>
+  }
+  return (
+    <span className="flex items-center gap-2 text-xs font-bold text-ink-muted">
+      <span className="hidden h-1.5 w-16 overflow-hidden rounded-full bg-white/10 sm:block">
+        <span className="block h-full rounded-full bg-secondary" style={{ width: `${walked}%` }} />
+      </span>
+      <span>{walked}% walked</span>
+      {world.my_xp > 0 && (
+        <>
+          <span aria-hidden="true">·</span>
+          <span className="text-primary">{world.my_xp} XP</span>
+        </>
+      )}
     </span>
   )
+}
+
+function WorldRow({ world }: { world: WorldSummary }) {
+  // A world that is still generating has no progress to report, so there the
+  // generation status is the only thing worth saying.
+  const badge =
+    world.status === 'ready' ? (
+      <WorldProgress world={world} />
+    ) : (
+      <span className={`text-xs font-extrabold uppercase tracking-[0.12em] ${statusTone[world.status]}`}>
+        {world.status}
+      </span>
+    )
   const title = (
     <span className="text-sm font-bold text-ink">
       {world.idx + 1}. {world.title}
