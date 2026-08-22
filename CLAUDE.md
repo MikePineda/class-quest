@@ -22,16 +22,23 @@ frontend) and `schema/README.md` (content contract) before touching code.
 - Timestamps are ISO-8601 UTC strings (`ids.utc_now_iso`), ids are uuid hex; artifact ids
   (`graph_id`, `game_id`) are minted server-side with `ids.artifact_id()`, never by the model.
 - MiniMax is reached through the `anthropic` SDK with `api_key=` (x-api-key). Never `auth_token`.
+- Settings read from the environment must not be typed as `list`/`dict`: pydantic-settings
+  JSON-decodes those before any validator runs, which crash-looped production once. Keep the
+  raw value a `str` and expose a parsed property (see `cors_origins`).
 - TDD on pure modules (ingest, validators, llm parsing, scoring). `cd backend && .venv/bin/ruff check . && .venv/bin/pytest`.
 
 ## Frontend (`frontend/`)
 - Vite + React + TS + Tailwind 3. The FE dev owns everything above `src/api/`.
-- `src/api/client.ts` is the only place that talks HTTP. Types come from `src/api/types.ts`
-  (hand-written mirror) until `npm run gen:api` replaces them with `types.gen.ts`.
+- `src/api/client.ts` is the only place that talks HTTP. `src/api/types.gen.ts` is generated
+  from the deployed OpenAPI schema (`npm run gen:api`); `src/api/types.ts` is the hand-written
+  mirror the client still imports. Regenerate whenever the backend contract changes.
 
 ## Git
 - Atomic commits, one logical change each, imperative subject, short body with the why.
-- Push to `main` = deploy (Dokploy webhook). CI (`.github/workflows/`) only guards merges.
+- `main` is deployed and protected: branch, PR, merge. CI (`.github/workflows/`) guards merges;
+  Dokploy deploys on merge via webhook.
+- Both Dockerfiles must keep a **named** final stage: Dokploy always passes `--target`.
+- Deploy/debug runbook: `docs/OPERATIONS.md`.
 
 ## Run
 ```

@@ -1,81 +1,58 @@
-// Wiring proof, not a real UI: login -> list my servers -> dump a server, plus an
-// offline fixture render. The FE dev replaces this file entirely.
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState } from 'react'
 import { api, ApiError, getToken, setToken } from './api/client'
-import type { PredictionScene, ServerDetail, ServerSummary } from './api/types'
-import { fixtureQuest } from './fixtures'
+import type { TokenOut, User } from './api/types'
+import { DemoExperience } from './demo/DemoExperience'
+import { AuthScreen } from './foundation/AuthScreen'
+import { ProfileScreen } from './foundation/ProfileScreen'
+import { ServerHub } from './foundation/ServerHub'
 
-const firstPrediction = fixtureQuest.chapters
-  .flatMap((c) => c.scenes)
-  .find((s): s is PredictionScene => s.type === 'prediction')!
-
-const errText = (e: unknown) => (e instanceof ApiError ? JSON.stringify(e.detail) : String(e))
+type Screen = 'profile' | 'servers'
 
 export default function App() {
-  const [email, setEmail] = useState('demo@classquest.app')
-  const [password, setPassword] = useState('demo1234')
-  const [authed, setAuthed] = useState(() => getToken() !== null)
-  const [servers, setServers] = useState<ServerSummary[]>([])
-  const [detail, setDetail] = useState<ServerDetail | null>(null)
-  const [useFixtures, setUseFixtures] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  if (window.location.pathname === '/demo') return <DemoExperience />
 
-  const run = (p: Promise<unknown>) => p.catch((e) => setError(errText(e)))
+  return <FoundationApp />
+}
 
-  const loadServers = () => run(api.listServers().then((r) => setServers(r.servers)))
+function FoundationApp() {
+  const [user, setUser] = useState<User | null>(null)
+  const [screen, setScreen] = useState<Screen>('servers')
+  const [checkingSession, setCheckingSession] = useState(() => getToken() !== null)
 
-  const auth = (e: FormEvent, mode: 'login' | 'register') => {
-    e.preventDefault()
-    setError(null)
-    const call =
-      mode === 'login' ? api.login({ email, password }) : api.register({ email, password, display_name: email.split('@')[0] })
-    run(call.then((t) => (setToken(t.token), setAuthed(true), loadServers())))
+  useEffect(() => {
+    if (!getToken()) return
+    api.me()
+      .then((currentUser) => {
+        setUser(currentUser)
+        setScreen(currentUser.role ? 'servers' : 'profile')
+      })
+      .catch((error: unknown) => {
+        if (error instanceof ApiError && error.status === 401) setToken(null)
+      })
+      .finally(() => setCheckingSession(false))
+  }, [])
+
+  const authenticated = (session: TokenOut) => {
+    setToken(session.token)
+    setUser(session.user)
+    setScreen(session.user.role ? 'servers' : 'profile')
   }
 
-  const input = 'w-full rounded-lg bg-surface-high px-3 py-2 text-ink outline-none ring-outline focus:ring-1'
-  const btn = 'rounded-lg bg-primary px-3 py-2 font-semibold text-background hover:bg-primary-soft'
+  const signOut = () => {
+    setToken(null)
+    setUser(null)
+    setScreen('servers')
+  }
 
-  return (
-    <main className="mx-auto max-w-2xl space-y-6 p-6">
-      <h1 className="text-2xl font-bold text-primary">ClassQuest wiring proof</h1>
-      <label className="flex items-center gap-2 text-ink-muted">
-        <input type="checkbox" checked={useFixtures} onChange={(e) => setUseFixtures(e.target.checked)} /> Use fixtures
-      </label>
-      {error && <p className="rounded-lg bg-surface p-3 font-mono text-sm text-error">{error}</p>}
+  if (checkingSession) {
+    return <main className="grid min-h-screen place-items-center bg-app-grid"><div className="text-center"><span className="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-primary font-black text-background">CQ</span><p className="mt-4 text-sm font-semibold text-ink-muted">Restoring your session…</p></div></main>
+  }
 
-      {useFixtures ? (
-        <section className="space-y-3 rounded-xl bg-surface p-4">
-          <p className="text-sm text-secondary">{fixtureQuest.title} / {firstPrediction.id}</p>
-          <p className="text-lg">{firstPrediction.prompt}</p>
-          {firstPrediction.options.map((o) => (
-            <button key={o.id} className="block w-full rounded-lg bg-surface-high p-3 text-left hover:bg-surface-highest">{o.text}</button>
-          ))}
-        </section>
-      ) : !authed ? (
-        <form onSubmit={(e) => auth(e, 'login')} className="space-y-3 rounded-xl bg-surface p-4">
-          <input className={input} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email" />
-          <input className={input} type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="password" />
-          <button className={btn} type="submit">Log in</button>
-          <button type="button" className="ml-3 text-secondary underline" onClick={(e) => auth(e, 'register')}>or register</button>
-        </form>
-      ) : (
-        <section className="space-y-3">
-          <div className="flex gap-3">
-            <button className={btn} onClick={loadServers}>Load my servers</button>
-            <button className="text-ink-muted underline" onClick={() => (setToken(null), setAuthed(false), setServers([]), setDetail(null))}>Log out</button>
-          </div>
-          <ul className="space-y-1">
-            {servers.map((s) => (
-              <li key={s.id}>
-                <button className="text-secondary hover:text-secondary-deep" onClick={() => run(api.getServer(s.id).then(setDetail))}>
-                  {s.name} <span className="text-ink-muted">({s.status}, {s.world_count} worlds)</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-          {detail && <pre className="overflow-x-auto rounded-xl bg-surface p-4 font-mono text-xs">{JSON.stringify(detail, null, 2)}</pre>}
-        </section>
-      )}
-    </main>
-  )
+  if (!user) return <AuthScreen onAuthenticated={authenticated} />
+
+  if (screen === 'profile') {
+    return <ProfileScreen user={user} onSaved={(updated) => { setUser(updated); setScreen('servers') }} onSignOut={signOut} />
+  }
+
+  return <ServerHub user={user} onEditProfile={() => setScreen('profile')} onSignOut={signOut} />
 }

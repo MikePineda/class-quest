@@ -61,7 +61,7 @@ def test_get_world_returns_graph_and_games_and_progress(client):
     assert body["games"]["quest"]["game_id"] == "q7kp2wm4"
     assert body["games"]["gauntlet"]["game_id"] == "g3xn8vr1"
     assert body["my_progress"] == {
-        "xp": 0, "scenes_total": 5, "scenes_attempted": 0, "scenes_correct": 0,
+        "xp": 0, "scenes_total": 6, "scenes_attempted": 0, "scenes_correct": 0,
         "explained_concept_ids": [],
     }
 
