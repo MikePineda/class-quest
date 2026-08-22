@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://classquest.app/schema/game.schema.json",
+  "title": "Game",
+  "description": "Stage 4 output. A playable game built from a CourseGraph. The model emits content that references the archetype's fixed visual vocabulary by name. It never emits CSS, colours, layout or markup. A game that does not validate against the vocabulary enums is a presentation bug caught before render.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "game_id", "graph_id", "archetype", "title", "chapters"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "game_id": { "type": "string", "pattern": "^[a-z0-9]{8,32}$" },
+    "graph_id": {
+      "type": "string",
+      "description": "The CourseGraph this was built from. Quest and Gauntlet built from the same upload share this value: that is the architectural claim, one extraction renders two games."
+    },
+    "archetype": {
+      "enum": ["quest", "gauntlet"],
+      "description": "quest is the narrative arc, long form, teaches. gauntlet is the timed arcade run over the same concepts, short form, verifies."
+    },
+    "title": { "type": "string", "maxLength": 120 },
+    "chapters": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 12,
+      "items": { "$ref": "#/$defs/chapter" }
+    }
+  },
+  "$defs": {
+    "chapter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "concept_ids", "background", "scenes"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9_]{2,48}$" },
+        "title": { "type": "string", "maxLength": 80 },
+        "concept_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" },
+          "description": "Concepts from the CourseGraph taught in this chapter. Chapter order must respect the prerequisite ordering of these concepts."
+        },
+        "background": { "$ref": "#/$defs/background" },
+        "scenes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": { "$ref": "#/$defs/scene" }
+        }
+      }
+    },
+    "background": {
+      "enum": ["cavern", "forest_path", "ruins", "observatory", "shore", "village"],
+      "description": "Fixed vocabulary. Hand-built tile sets. Adding one is art work, not a model change."
+    },
+    "actor": {
+      "enum": ["explorer", "mentor_owl", "rival", "villager"]
+    },
+    "prop": {
+      "enum": ["doorway_pair", "chart_frame", "lantern", "crystal_cluster", "chest", "signpost"]
+    },
+    "scene": {
+      "oneOf": [
+        { "$ref": "#/$defs/dialogue_scene" },
+        { "$ref": "#/$defs/prediction_scene" },
+        { "$ref": "#/$defs/simulation_scene" }
+      ]
+    },
+    "dialogue_scene": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id", "speaker", "lines"],
+      "properties": {
+        "type": { "const": "dialogue" },
+        "id": { "type": "string", "pattern": "^[a-z0-9_]{2,48}$" },
+        "speaker": { "$ref": "#/$defs/actor" },
+        "props": {
+          "type": "array",
+          "maxItems": 3,
+          "items": { "$ref": "#/$defs/prop" }
+        },
+        "lines": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": { "type": "string", "maxLength": 240 },
+          "description": "Sets up the concept. Never states the answer to a prediction scene that follows it."
+        }
+      }
+    },
+    "prediction_scene": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The core mechanic. The learner commits before the reveal, which is the pretesting effect. Distractors come from the CourseGraph misconceptions, never invented here.",
+      "required": ["type", "id", "concept_id", "prompt", "options", "reveal"],
+      "properties": {
+        "type": { "const": "prediction" },
+        "id": { "type": "string", "pattern": "^[a-z0-9_]{2,48}$" },
+        "concept_id": { "type": "string" },
+        "props": {
+          "type": "array",
+          "maxItems": 3,
+          "items": { "$ref": "#/$defs/prop" }
+        },
+        "prompt": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "Asks the learner to predict an outcome. Must be answerable before instruction, since an unsuccessful attempt is the point."
+        },
+        "options": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 4,
+          "items": { "$ref": "#/$defs/option" }
+        },
+        "reveal": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Shown after the learner commits, whatever they chose. Explains the correct answer and why the tempting wrong one is tempting."
+        }
+      }
+    },
+    "option": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "text", "correct"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9_]{2,48}$" },
+        "text": { "type": "string", "maxLength": 160 },
+        "correct": { "type": "boolean" },
+        "misconception_id": {
+          "type": "string",
+          "description": "Required on every incorrect option. Traces the distractor back to the CourseGraph misconception it came from. This is what makes cohort answer distributions diagnostic rather than decorative: knowing 52 percent picked a specific misconception tells an educator what to reteach."
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "correct": { "const": false } }, "required": ["correct"] },
+          "then": { "required": ["misconception_id"] }
+        },
+        {
+          "if": { "properties": { "correct": { "const": true } }, "required": ["correct"] },
+          "then": { "not": { "required": ["misconception_id"] } }
+        }
+      ]
+    },
+    "simulation_scene": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "For concepts at bloom level apply or above. A hand-built widget the learner manipulates. The model chooses the widget and its framing, never implements it.",
+      "required": ["type", "id", "concept_id", "widget", "instruction"],
+      "properties": {
+        "type": { "const": "simulation" },
+        "id": { "type": "string", "pattern": "^[a-z0-9_]{2,48}$" },
+        "concept_id": { "type": "string" },
+        "widget": {
+          "enum": ["curve_fit", "threshold_slider", "sorting_bins", "graph_walk"],
+          "description": "Fixed vocabulary of hand-built widgets, same principle as backgrounds."
+        },
+        "instruction": { "type": "string", "maxLength": 240 },
+        "success_condition": { "type": "string", "maxLength": 200 }
+      }
+    }
+  }
+}

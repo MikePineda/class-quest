@@ -1,0 +1,54 @@
+{
+  "schema_version": "1.0",
+  "game_id": "g3xn8vr1",
+  "graph_id": "wk3ml0a1",
+  "archetype": "gauntlet",
+  "title": "Week 3 Gauntlet",
+  "chapters": [
+    {
+      "id": "ch_run",
+      "title": "Timed Run",
+      "concept_ids": ["training_data", "generalisation", "overfitting", "validation_split", "regularisation"],
+      "background": "cavern",
+      "scenes": [
+        {
+          "type": "prediction",
+          "id": "g_overfit",
+          "concept_id": "overfitting",
+          "prompt": "99 percent on training data. On new data?",
+          "options": [
+            { "id": "op_same", "text": "About 99 percent again", "correct": false, "misconception_id": "high_train_high_test" },
+            { "id": "op_worse", "text": "Far worse", "correct": true },
+            { "id": "op_better", "text": "Slightly better", "correct": false, "misconception_id": "high_train_high_test" },
+            { "id": "op_unknown", "text": "Cannot tell", "correct": false, "misconception_id": "overfitting_is_bad_data" }
+          ],
+          "reveal": "Far worse. The gap between training and unseen performance is the signature."
+        },
+        {
+          "type": "prediction",
+          "id": "g_regularisation",
+          "concept_id": "regularisation",
+          "prompt": "You add regularisation. Training error does what?",
+          "options": [
+            { "id": "op_down", "text": "Falls", "correct": false, "misconception_id": "regularisation_free" },
+            { "id": "op_up", "text": "Rises", "correct": true },
+            { "id": "op_flat", "text": "Unchanged", "correct": false, "misconception_id": "regularisation_free" }
+          ],
+          "reveal": "Rises, on purpose. You trade training accuracy for performance on data you have not seen."
+        },
+        {
+          "type": "prediction",
+          "id": "g_validation",
+          "concept_id": "validation_split",
+          "prompt": "You tuned 40 settings against the test set. The score is now?",
+          "options": [
+            { "id": "op_honest", "text": "Still an honest estimate", "correct": false, "misconception_id": "tune_on_test" },
+            { "id": "op_optimistic", "text": "Optimistic, information leaked", "correct": true },
+            { "id": "op_useless", "text": "Completely meaningless", "correct": false, "misconception_id": "tune_on_test" }
+          ],
+          "reveal": "Optimistic. No gradient touched it, but your choices did."
+        }
+      ]
+    }
+  ]
+}

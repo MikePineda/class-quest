@@ -1,0 +1,107 @@
+{
+  "schema_version": "1.0",
+  "graph_id": "wk3ml0a1",
+  "source": {
+    "title": "Intro to Machine Learning, Week 3",
+    "segment_count": 14
+  },
+  "concepts": [
+    {
+      "id": "training_data",
+      "label": "Training data",
+      "summary": "The examples a model learns from. Performance on this set tells you what the model memorised, not what it learned.",
+      "bloom_level": "understand",
+      "prerequisites": [],
+      "source_spans": [
+        { "segment_id": 2, "quote": "The training set is the portion of the data the model sees during fitting." }
+      ],
+      "misconceptions": [
+        {
+          "id": "training_is_performance",
+          "statement": "If it does well on the training data, it is a good model.",
+          "why_plausible": "Training accuracy is the first and often only number a beginner sees, and high numbers usually mean success everywhere else in life.",
+          "correction": "Training accuracy measures recall of examples already seen. A model can score perfectly by memorising and still be useless on anything new."
+        }
+      ]
+    },
+    {
+      "id": "generalisation",
+      "label": "Generalisation",
+      "summary": "A model generalises when it performs well on data it has never seen. This, not training accuracy, is the goal.",
+      "bloom_level": "understand",
+      "prerequisites": ["training_data"],
+      "source_spans": [
+        { "segment_id": 3, "quote": "Generalisation is the ability to perform well on previously unseen inputs." }
+      ],
+      "misconceptions": [
+        {
+          "id": "more_data_always_generalises",
+          "statement": "Any model will generalise if you give it enough data.",
+          "why_plausible": "More data does help in many cases, so it reads as a universal fix rather than one factor among several.",
+          "correction": "Data volume does not rescue a model whose capacity lets it memorise. Capacity and regularisation matter independently of size."
+        }
+      ]
+    },
+    {
+      "id": "overfitting",
+      "label": "Overfitting",
+      "summary": "A model overfits when it captures noise specific to the training set. Training error keeps falling while error on new data rises.",
+      "bloom_level": "analyse",
+      "prerequisites": ["training_data", "generalisation"],
+      "source_spans": [
+        { "segment_id": 5, "quote": "Overfitting occurs when a model fits noise in the training data rather than the underlying signal." },
+        { "segment_id": 6, "quote": "The characteristic signature is a widening gap between training and validation error." }
+      ],
+      "misconceptions": [
+        {
+          "id": "high_train_high_test",
+          "statement": "99 percent on training means roughly 99 percent on new data.",
+          "why_plausible": "Nothing in the training run signals a problem. The number goes up and up, which looks exactly like progress.",
+          "correction": "The two scores decouple once the model starts fitting noise. A near-perfect training score with no validation check is the classic warning sign, not a result."
+        },
+        {
+          "id": "overfitting_is_bad_data",
+          "statement": "Overfitting means the data was dirty.",
+          "why_plausible": "The word noise sounds like a data quality problem rather than a model capacity problem.",
+          "correction": "Overfitting is about the model having enough capacity to memorise whatever it is given. Clean data can be overfit just as easily."
+        }
+      ]
+    },
+    {
+      "id": "validation_split",
+      "label": "Validation split",
+      "summary": "Holding out data the model never trains on, so you can measure generalisation instead of guessing at it.",
+      "bloom_level": "apply",
+      "prerequisites": ["generalisation", "overfitting"],
+      "source_spans": [
+        { "segment_id": 8, "quote": "A held-out validation set provides an unbiased estimate of performance on unseen data." }
+      ],
+      "misconceptions": [
+        {
+          "id": "tune_on_test",
+          "statement": "You can tune your model against the test set as long as you do not train on it.",
+          "why_plausible": "Tuning does not feel like training, so the test set still seems untouched.",
+          "correction": "Repeated tuning against a set leaks information into your choices. The score stops being an honest estimate even though no gradient touched it."
+        }
+      ]
+    },
+    {
+      "id": "regularisation",
+      "label": "Regularisation",
+      "summary": "Constraining a model so it prefers simpler explanations, trading a little training accuracy for better performance on new data.",
+      "bloom_level": "apply",
+      "prerequisites": ["overfitting"],
+      "source_spans": [
+        { "segment_id": 10, "quote": "Regularisation penalises model complexity, biasing the fit toward simpler hypotheses." }
+      ],
+      "misconceptions": [
+        {
+          "id": "regularisation_free",
+          "statement": "Regularisation improves the model with no downside.",
+          "why_plausible": "It is presented as the fix for overfitting, so it reads as strictly good.",
+          "correction": "Regularisation deliberately raises training error. Too much of it underfits. The trade is the whole point."
+        }
+      ]
+    }
+  ]
+}
