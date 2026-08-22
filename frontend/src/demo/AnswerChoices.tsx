@@ -23,7 +23,7 @@ export function AnswerChoices({ options, selectedId, locked, label, onSelect }: 
             onClick={() => {
               if (!locked) onSelect(option.id)
             }}
-            className={`answer-choice group w-full rounded-xl border px-4 py-4 text-left transition sm:px-5 ${
+            className={`answer-choice group w-full rounded-lg border px-4 py-4 text-left transition sm:px-5 ${
               selected
                 ? 'border-secondary bg-secondary/10 text-ink shadow-[0_0_0_1px_rgba(79,219,200,0.2)]'
                 : 'border-white/10 bg-surface-high/75 text-ink hover:border-white/25 hover:bg-surface-highest'
@@ -32,7 +32,7 @@ export function AnswerChoices({ options, selectedId, locked, label, onSelect }: 
             <span className="flex items-center gap-4">
               <span
                 aria-hidden="true"
-                className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg border font-mono text-sm font-bold ${
+                className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg border font-hud text-xs ${
                   selected
                     ? 'border-secondary bg-secondary text-background'
                     : 'border-white/15 bg-background/40 text-ink-muted group-hover:border-white/30'

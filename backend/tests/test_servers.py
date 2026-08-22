@@ -1,9 +1,14 @@
 """POST/GET/DELETE /servers*, join, leaderboard, cohort."""
 import io
+from pathlib import Path
+
+import pytest
+from fastapi import HTTPException, UploadFile
 
 from app import models
 from app.db import SessionLocal
 from app.ids import new_id, utc_now_iso
+from app.routers import servers as server_routes
 from app.security import hash_password
 from app.services import generate
 
@@ -98,6 +103,58 @@ def test_create_server_with_file_and_text_two_documents_seq_continues(client, mo
         assert all(d == docs[0].id for d in doc_ids_in_seq_order[:first_doc1_idx])
     finally:
         db.close()
+
+
+@pytest.mark.parametrize("client_filename", ["../outside.txt", "/tmp/outside.txt"])
+def test_create_server_never_uses_client_filename_as_storage_path(
+    client, monkeypatch, settings, client_filename,
+):
+    """Multipart filenames are metadata, never filesystem paths."""
+    monkeypatch.setattr(generate, "start_pipeline", lambda server_id: True)
+    token = _register(client)
+    file_bytes = _content(500).encode()
+    files = [("files", (client_filename, io.BytesIO(file_bytes), "text/plain"))]
+
+    r = _create_server(client, token, files=files)
+    assert r.status_code == 201, r.text
+    server_id = r.json()["id"]
+
+    db = SessionLocal()
+    try:
+        doc = db.query(models.Document).filter_by(server_id=server_id).one()
+        stored_path = Path(doc.stored_path).resolve()
+        server_dir = (settings.uploads_dir / server_id).resolve()
+
+        assert doc.filename == client_filename  # original name remains display metadata
+        assert stored_path.parent == server_dir
+        assert stored_path.name != "outside.txt"
+        assert stored_path.read_bytes() == file_bytes
+        assert not (settings.uploads_dir / "outside.txt").exists()
+    finally:
+        db.close()
+
+
+def test_upload_reader_stops_one_byte_after_configured_limit():
+    class ReadSpy(io.BytesIO):
+        requested_size = None
+
+        def read(self, size=-1):
+            self.requested_size = size
+            return super().read(size)
+
+    stream = ReadSpy(b"123456789")
+    upload = UploadFile(filename="notes.txt", file=stream)
+
+    with pytest.raises(HTTPException) as exc:
+        server_routes._read_upload(upload, max_bytes=5)
+
+    assert exc.value.status_code == 413
+    assert stream.requested_size == 6
+
+
+def test_upload_reader_accepts_content_at_configured_limit():
+    upload = UploadFile(filename="notes.txt", file=io.BytesIO(b"12345"))
+    assert server_routes._read_upload(upload, max_bytes=5) == b"12345"
 
 
 def test_create_server_too_short_content_is_422(client, monkeypatch):

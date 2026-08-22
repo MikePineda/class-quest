@@ -178,12 +178,12 @@ const lantern: Still = { src: '/sprites/props/lantern.png', w: 16, h: 32 }
 
 export const PORTALS: Record<PortalKind, PortalArt> = {
   // Amber is the app's primary, so the reading gate feels like home.
-  storybook: { frame: arch, lantern, core: '#f59e0b', glow: 'rgba(245,158,11,0.50)', rim: '#ffc174', icon: 'book' },
-  quiz: { frame: arch, lantern, core: '#ef4444', glow: 'rgba(239,68,68,0.50)', rim: '#ff8a8a', icon: 'question' },
+  storybook: { frame: arch, lantern, core: '#f0a63c', glow: 'rgba(240,166,60,0.50)', rim: '#ffc174', icon: 'book' },
+  quiz: { frame: arch, lantern, core: '#ff8f86', glow: 'rgba(255,143,134,0.50)', rim: '#ffb9b3', icon: 'question' },
   // Teal is the app's secondary and reads as the calmest of the three, which
   // suits the gate where you talk rather than answer.
-  explain: { frame: arch, lantern, core: '#4fdbc8', glow: 'rgba(79,219,200,0.50)', rim: '#8ef0e2', icon: 'speech' },
-  sealed: { frame: arch, lantern: null, core: '#6b7280', glow: 'rgba(107,114,128,0.30)', rim: '#9aa1ad', icon: 'lock' },
+  explain: { frame: arch, lantern, core: '#43d9c4', glow: 'rgba(67,217,196,0.50)', rim: '#8ef0e2', icon: 'speech' },
+  sealed: { frame: arch, lantern: null, core: '#6f7aa0', glow: 'rgba(111,122,160,0.30)', rim: '#8f9ac0', icon: 'lock' },
 }
 
 export function portalArt(kind: PortalKind): PortalArt {
