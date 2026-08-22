@@ -6,27 +6,37 @@
  * instant and closing it loses nothing — how far the learner has read lives in
  * the caller, not here.
  *
- * Two rules shape the whole file:
+ * It mounts its own `VisualNovelShell`: walking into the gate is arriving
+ * somewhere, not opening a dialog box. The storyteller who stands beside the
+ * arch on the map is the one talking, and the concept's write-up is their line.
+ *
+ * Three rules shape the whole file:
  *
  * - **Graph order is teaching order.** `graph.concepts` is already sorted so
  *   that nothing depends on something further down the list. The rail is that
  *   list, unsorted and unfiltered, which is why there is no ordering logic
  *   anywhere below.
- * - **Nothing on screen is written by us.** The label, the write-up, the quote
+ * - **Nothing on screen is written by us.** The label, the write-up, the quotes
  *   and the three lines of each common mistake are generated or extracted
  *   content. Real content is thin — often one common mistake, sometimes no
  *   quote at all — so every field is guarded and a missing one renders nothing.
  *   Connective prose that implies content we do not have is the one thing this
  *   screen must never print.
+ * - **A concept carries up to six verbatim quotes and this shows all of them.**
+ *   They are the only part of the screen the learner can check against their own
+ *   material, so dropping five of six was throwing away the evidence. The first
+ *   is open; the rest are one click away, because six blockquotes at once is the
+ *   wall of text this redesign exists to kill.
  *
  * Every string here is read by a first-year student who has never seen our
  * docs: the vocabulary of the schema stays in the code and out of the screen.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { Concept, CourseGraph, Misconception } from '../api/types'
+import type { BloomLevel, Concept, CourseGraph, Misconception, SourceSpan } from '../api/types'
 import { filled, Insight, SourceQuote } from './SceneStages'
-import type { SourceQuoteProps } from './SceneStages'
+import { VisualNovelShell } from './vn'
+import { portalArt } from './vocabulary'
 
 export interface StorybookPanelProps {
   /** The course content. Null degrades to an empty state, never throws. */
@@ -35,26 +45,46 @@ export interface StorybookPanelProps {
   readIds: ReadonlySet<string>
   /** Called every time a concept is opened, including the first one shown. */
   onRead: (conceptId: string) => void
+  /** World XP as the server knows it. Null shows nothing rather than a zero. */
+  xp?: number | null
   onClose: () => void
 }
 
 /**
- * The first quote that actually carries text, with its place in the upload.
+ * What a concept is asking of the reader, from `bloom_level`.
  *
- * The generator writes the strongest span first, so this is `source_spans[0]`
- * in every real artifact; scanning past an empty one only avoids rendering a
- * pair of quotation marks around nothing.
+ * A translation of a closed enum into the learner's language, the same job
+ * `vocabulary.ts` does for props and biomes — not a claim about the content. The
+ * taxonomy's own name never reaches the screen, and neither does the raw value.
  */
-const quoteOf = (concept: Concept, title: string | null): SourceQuoteProps | null => {
-  const span = concept.source_spans.find((candidate) => filled(candidate.quote))
-  return span ? { quote: span.quote, segment: span.segment_id, title } : null
+const AIM_BY_LEVEL: Record<BloomLevel, string> = {
+  remember: 'Read this one to be able to recall it.',
+  understand: 'Read this one to be able to put it in your own words.',
+  apply: 'Read this one to be able to use it on a new problem.',
+  analyse: 'Read this one to be able to pull it apart.',
+  evaluate: 'Read this one to be able to judge when it holds.',
+  create: 'Read this one to be able to build something with it.',
 }
+
+/** Undefined for anything that is not one of the six levels: a bad value says nothing. */
+const aimOf = (concept: Concept): string | undefined => AIM_BY_LEVEL[concept.bloom_level]
+
+/**
+ * Every quote that actually carries text, in the order the generator wrote them.
+ *
+ * The strongest span is first, which is why the caller opens on `[0]` — but a
+ * concept may carry up to six, and the ones after the first are the reader's
+ * only other way back to their own material. Empty spans are dropped so nothing
+ * renders a pair of quotation marks around nothing.
+ */
+const quotesOf = (concept: Concept): SourceSpan[] =>
+  concept.source_spans.filter((span) => filled(span.quote))
 
 /** A common mistake with no text in any of its three lines is not worth a panel. */
 const speakable = (mistake: Misconception) =>
   filled(mistake.statement) || filled(mistake.why_plausible) || filled(mistake.correction)
 
-export function StorybookPanel({ graph, readIds, onRead, onClose }: StorybookPanelProps) {
+export function StorybookPanel({ graph, readIds, onRead, xp = null, onClose }: StorybookPanelProps) {
   const concepts = useMemo(() => graph?.concepts ?? [], [graph])
   const total = concepts.length
   const [index, setIndex] = useState(0)
@@ -121,11 +151,13 @@ export function StorybookPanel({ graph, readIds, onRead, onClose }: StorybookPan
     [concepts, readIds],
   )
 
+  const byId = useMemo(() => new Map(concepts.map((entry, slot) => [entry.id, slot])), [concepts])
+
   // An empty graph is possible — a source that yielded nothing still loads a
   // world — and saying so beats a blank page that looks broken.
   if (concept === null) {
     return (
-      <div>
+      <VisualNovelShell kind="storybook" title="Nothing to read yet" xp={xp} onClose={onClose}>
         <p className="leading-7 text-ink-muted">
           Nothing was pulled out of your notes for this world yet, so there is nothing to read here. Regenerate the
           world to try again.
@@ -133,43 +165,48 @@ export function StorybookPanel({ graph, readIds, onRead, onClose }: StorybookPan
         <button className="button-primary mt-6" onClick={onClose}>
           Back to the hub
         </button>
-      </div>
+      </VisualNovelShell>
     )
   }
 
+  const art = portalArt('storybook')
   const sourceTitle = graph && filled(graph.source.title) ? graph.source.title : null
-  const quote = quoteOf(concept, sourceTitle)
+  const quotes = quotesOf(concept)
   const mistakes = concept.misconceptions.filter(speakable)
   const summary = filled(concept.summary) ? concept.summary : null
-  const bare = summary === null && quote === null && mistakes.length === 0
+  const bare = summary === null && quotes.length === 0 && mistakes.length === 0
   const isFirst = safeIndex === 0
   const isLast = safeIndex === total - 1
 
-  return (
-    <div>
-      {/* Where you are and how much is left, before any of the reading. */}
-      <div className="border-b border-white/10 pb-5">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-ink-muted">
-            {safeIndex + 1} of {total}
-          </p>
-          <p className="ml-auto text-xs font-bold text-secondary" aria-live="polite">
-            {readCount} of {total} read
-          </p>
-        </div>
-        <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-surface-high">
-          <div
-            className="h-full rounded-full bg-secondary transition-all duration-300"
-            style={{ width: `${total === 0 ? 0 : (readCount / total) * 100}%` }}
-          />
-        </div>
-      </div>
+  // Only the prerequisites that resolve to something in this world. An id with
+  // no concept behind it is a dangling reference, not a reading suggestion.
+  const builtOn = concept.prerequisites
+    .map((id) => {
+      const slot = byId.get(id)
+      return slot === undefined ? null : { slot, label: concepts[slot].label }
+    })
+    .filter((entry): entry is { slot: number; label: string } => entry !== null)
 
-      <div className="mt-6 grid gap-6 sm:grid-cols-[minmax(9rem,12rem)_1fr]">
+  return (
+    <VisualNovelShell
+      kind="storybook"
+      title={concept.label}
+      subtitle={aimOf(concept)}
+      progress={{ done: readCount, total, label: 'read' }}
+      xp={xp}
+      speaker={{ actor: 'villager' }}
+      // The write-up is what the storyteller says. Blank omits the whole band
+      // rather than putting an empty speech bubble on the screen.
+      dialogue={summary ?? undefined}
+      footerHint="Arrow keys ← and → turn the page."
+      onClose={onClose}
+      closeLabel="Back to the hub"
+    >
+      <div className="grid gap-6 sm:grid-cols-[minmax(9rem,12rem)_1fr]">
         {/* The rail is the course, in the order it builds. Nothing is locked:
             skipping ahead is allowed, it just is not the order it was written in. */}
         <nav aria-label="What this world covers">
-          <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-ink-muted">In the order it builds</p>
+          <p className="eyebrow text-ink-muted">In the order it builds</p>
           <ol className="mt-3 space-y-1.5">
             {concepts.map((entry, slot) => {
               const current = slot === safeIndex
@@ -207,29 +244,41 @@ export function StorybookPanel({ graph, readIds, onRead, onClose }: StorybookPan
           </ol>
         </nav>
 
-        <article key={concept.id} ref={cardRef} className="stage-enter scroll-mt-2">
-          <h3 className="text-2xl font-black leading-tight text-ink sm:text-3xl">{concept.label}</h3>
+        <article key={concept.id} ref={cardRef} className="min-w-0 scroll-mt-2">
+          {/* Where this one sits in the chain. The names are the learner's own
+              material and the jump is the fastest way back to them. */}
+          {builtOn.length > 0 && (
+            <div className="flex flex-wrap items-baseline gap-2">
+              <p className="eyebrow text-ink-muted">Builds on</p>
+              {builtOn.map((entry) => (
+                <button
+                  key={entry.slot}
+                  type="button"
+                  className="rounded-lg border border-white/12 bg-surface-high px-2.5 py-1 text-xs font-bold text-ink-muted transition hover:border-white/30 hover:text-ink"
+                  onClick={() => goTo(entry.slot)}
+                >
+                  {entry.label}
+                </button>
+              ))}
+            </div>
+          )}
 
-          {summary ? (
-            <p className="mt-4 max-w-prose text-base leading-8 text-ink">{summary}</p>
-          ) : (
-            <p className="mt-4 max-w-prose leading-7 text-ink-muted">
-              No write-up was saved for this one.
-            </p>
+          {summary === null && (
+            <p className="mt-4 max-w-prose leading-7 text-ink-muted">No write-up was saved for this one.</p>
           )}
 
           {/* Verbatim from the upload. It is here because the learner can check
               it against their own material — which is why we never paraphrase
               it and never print the block without one. */}
-          {quote && (
+          {quotes.length > 0 && (
             <div className="mt-6">
-              <SourceQuote quote={quote.quote} segment={quote.segment} title={quote.title} />
+              <SourceQuotes key={concept.id} quotes={quotes} title={sourceTitle} />
             </div>
           )}
 
           {mistakes.length > 0 && (
             <div className="mt-7">
-              <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-ink-muted">
+              <p className="eyebrow text-ink-muted">
                 {mistakes.length === 1 ? 'Where people trip up' : `Where people trip up · ${mistakes.length}`}
               </p>
               <div className="mt-3 space-y-5">
@@ -272,13 +321,49 @@ export function StorybookPanel({ graph, readIds, onRead, onClose }: StorybookPan
                 Next
               </button>
             )}
-            <p className="ml-auto text-xs font-semibold text-ink-muted">
-              Arrow keys <kbd className="font-mono text-ink">←</kbd> <kbd className="font-mono text-ink">→</kbd> also
-              turn the page.
+            <p className="ml-auto font-hud text-[11px]" style={{ color: art.rim }}>
+              {safeIndex + 1} / {total}
             </p>
           </div>
         </article>
       </div>
+    </VisualNovelShell>
+  )
+}
+
+/**
+ * Every line the generator kept from the upload for this concept.
+ *
+ * The first is always open — it is the one the generator ranked strongest, and
+ * a reader who wants one piece of evidence wants that one. The rest are behind
+ * a control that says exactly how many there are, so the count is honest whether
+ * or not anybody opens it. There is one of these per concept, keyed by the
+ * concept, so turning the page closes it again.
+ */
+function SourceQuotes({ quotes, title }: { quotes: readonly SourceSpan[]; title: string | null }) {
+  const [expanded, setExpanded] = useState(false)
+  const rest = quotes.length - 1
+  const shown = expanded ? quotes : quotes.slice(0, 1)
+
+  return (
+    <div>
+      <div className="space-y-3">
+        {shown.map((span, i) => (
+          <SourceQuote key={`${span.segment_id}-${i}`} quote={span.quote} segment={span.segment_id} title={title} />
+        ))}
+      </div>
+      {rest > 0 && (
+        <button
+          type="button"
+          className="button-secondary mt-3"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((open) => !open)}
+        >
+          {expanded
+            ? `Hide the other ${rest === 1 ? 'line' : `${rest} lines`}`
+            : `Show ${rest === 1 ? '1 more line' : `${rest} more lines`} from your notes`}
+        </button>
+      )}
     </div>
   )
 }

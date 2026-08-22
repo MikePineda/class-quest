@@ -136,17 +136,23 @@ export function PredictionStage({
  * plausible-sounding text of our own. That includes the quote: `evidence` is
  * rendered only when the caller hands one over, so a panel that shows the quote
  * on its own screen does not print it twice.
+ *
+ * `children` is the caller's own postscript — the quiz puts the rest of the
+ * class there. It lands after the correction and the quote and before the way
+ * forward, because the button has to stay the last thing on the screen.
  */
 export function DiagnosisStage({
   diagnosis,
   evidence = null,
   onContinue,
   continueLabel,
+  children,
 }: {
   diagnosis: Diagnosis
   evidence?: SourceQuoteProps | null
   onContinue: () => void
   continueLabel: string
+  children?: ReactNode
 }) {
   const misconception = diagnosis.misconception
   const showPanels =
@@ -217,6 +223,10 @@ export function DiagnosisStage({
           <SourceQuote quote={evidence.quote} segment={evidence.segment} title={evidence.title} />
         </div>
       )}
+
+      {/* `empty:mt-0` because the quiz's postscript renders nothing on thin
+          data, and a margin under an empty div is a band of dead space. */}
+      {children && <div className="mt-6 empty:mt-0">{children}</div>}
 
       <button className="button-primary mt-7" onClick={onContinue}>
         {continueLabel}
