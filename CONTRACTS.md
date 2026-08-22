@@ -6,7 +6,7 @@ Everything the FE needs to talk to the backend. TypeScript mirror: `frontend/src
 
 | Thing | Value |
 |---|---|
-| Base URL (prod) | `https://api.classquest.mikepineda.work` — set as `VITE_API_URL` |
+| Base URL (prod) | `https://api.classquest.net` — set as `VITE_API_URL` |
 | Base URL (dev) | leave `VITE_API_URL` unset; the client calls `/api/*` and Vite proxies to `VITE_API_PROXY` or `http://localhost:8000` |
 | Auth | `Authorization: Bearer <token>` on every endpoint except `/health`, `/auth/register`, `/auth/login`, `/servers/public` |
 | Token | JWT, 7 days, no refresh. Client stores it in `localStorage["cq_token"]`. A 401 means: drop the token, show login. |
@@ -402,4 +402,4 @@ Quest and gauntlet from the same world share `graph_id` (`wk3ml0a1` in the fixtu
 - `is_public` in the multipart form is the string `"true"`/`"false"`.
 - IDs are 32-char uuid hex; content ids (`concept_id`, `scene_id`, `option_id`) are slugs `^[a-z0-9_]{2,48}$`; `graph_id`/`game_id` are `^[a-z0-9]{8,32}$`.
 - Timestamps are ISO-8601 UTC strings (`2026-08-22T09:15:00Z`).
-- The FE dev has no Python: build against the deployed API plus `frontend/src/fixtures/`. Once the API is up, `OPENAPI_SOURCE=https://api.classquest.mikepineda.work/openapi.json npm run gen:api` regenerates `src/api/types.gen.ts`; until then `src/api/types.ts` is the contract.
+- The FE dev has no Python: build against the deployed API plus `frontend/src/fixtures/`. Once the API is up, `OPENAPI_SOURCE=https://api.classquest.net/openapi.json npm run gen:api` regenerates `src/api/types.gen.ts`; until then `src/api/types.ts` is the contract.
