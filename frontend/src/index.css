@@ -4,4 +4,81 @@
 
 body {
   @apply bg-background text-ink font-sans;
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+}
+
+.bg-quest-grid {
+  background-color: #0b1326;
+  background-image:
+    radial-gradient(circle at 18% 12%, rgba(245, 158, 11, 0.1), transparent 26rem),
+    radial-gradient(circle at 82% 32%, rgba(79, 219, 200, 0.09), transparent 30rem),
+    linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+  background-size: auto, auto, 32px 32px, 32px 32px;
+}
+
+.quest-panel {
+  position: relative;
+}
+
+.quest-panel::before {
+  position: absolute;
+  inset: 0.75rem 0.75rem auto auto;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-top: 1px solid rgba(79, 219, 200, 0.32);
+  border-right: 1px solid rgba(79, 219, 200, 0.32);
+  border-radius: 0 0.75rem 0 0;
+  content: '';
+  pointer-events: none;
+}
+
+.eyebrow {
+  @apply text-xs font-extrabold uppercase tracking-[0.19em] text-primary-soft;
+}
+
+.status-dot {
+  height: 0.65rem;
+  width: 0.65rem;
+  border-radius: 9999px;
+  box-shadow: 0 0 18px currentColor;
+}
+
+.answer-choice:focus-visible {
+  outline: 2px solid #4fdbc8;
+  outline-offset: 3px;
+}
+
+.stage-enter {
+  animation: stage-enter 240ms ease-out both;
+}
+
+@keyframes stage-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
