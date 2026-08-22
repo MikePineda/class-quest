@@ -378,7 +378,9 @@ def test_derive_gauntlet_validates_against_graph(graph, quest):
     assert ch["concept_ids"] == [
         "training_data", "generalisation", "overfitting", "validation_split", "regularisation",
     ]
-    assert [s["id"] for s in ch["scenes"]] == ["g_sc_pred_training", "g_sc_pred_overfit"]
+    assert [s["id"] for s in ch["scenes"]] == [
+        "g_sc_pred_training", "g_sc_pred_overfit", "g_sc_transfer_overfit",
+    ]
     assert all(s["type"] == "prediction" for s in ch["scenes"])
 
 
