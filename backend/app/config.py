@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     min_total_chars: int = 400
 
     seed_demo: bool = True
+    # Which server the seeded classmate cohort joins. Empty = the demo server
+    # created by `seed.ensure_demo_server`. A plain `str` on purpose: see the
+    # note on cors_origins_raw -- anything pydantic-settings would JSON-decode
+    # turns a bad env value into a crash loop at import time.
+    demo_cohort_server_id: str = ""
 
     @property
     def cors_origins(self) -> list[str]:
