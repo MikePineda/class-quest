@@ -39,6 +39,7 @@ import { quizThreshold } from './gating'
 import { diagnose } from './pedagogy'
 import { DiagnosisStage, filled, Insight, RewardNote } from './SceneStages'
 import type { SceneOutcome, SourceQuoteProps } from './SceneStages'
+import { illustrationProps } from './conceptProps'
 import { SceneIllustration, VisualNovelShell, VnChoiceRow } from './vn'
 import type { VnChoice } from './vn'
 
@@ -76,6 +77,11 @@ function toneOf(option: Option, outcome: SceneOutcome | null): VnChoice['tone'] 
 export interface QuizPanelProps {
   /** The gauntlet game. Its prediction scenes are the questions. */
   gauntlet: Game
+  /**
+   * The quest for the same graph, read **only** for the props the model chose
+   * per concept. Its scenes are not walkable and none of its text is shown.
+   */
+  quest?: Game | null
   /** Where misconceptions and verified quotes live. Null degrades, never throws. */
   graph: CourseGraph | null
   /** Commits made in this session, keyed by scene id. */
@@ -100,6 +106,7 @@ export interface QuizPanelProps {
 
 export function QuizPanel({
   gauntlet,
+  quest,
   graph,
   outcomes,
   restored,
@@ -271,14 +278,16 @@ export function QuizPanel({
     : []
 
   /**
-   * The scene's own props, and nothing else. Undefined rather than an empty
-   * array when the scene declared none: `SceneIllustration` renders null either
-   * way, but the shell would still open a band for the element that returned it.
+   * What illustrates this question. No gauntlet scene in any generated world
+   * declares a prop, so without `illustrationProps` this band is always empty
+   * and `chart_frame` never reaches a screen at all — read the note in
+   * `conceptProps.ts` for what is and is not inherited.
+   *
+   * Undefined rather than an empty array when there is nothing: the shell would
+   * still open a band for an element that renders null.
    */
-  const illustration =
-    question && question.props && question.props.length > 0 ? (
-      <SceneIllustration props={question.props} />
-    ) : undefined
+  const shown = illustrationProps(question, quest)
+  const illustration = shown ? <SceneIllustration props={shown} /> : undefined
 
   return (
     <VisualNovelShell
