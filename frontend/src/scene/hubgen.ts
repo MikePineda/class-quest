@@ -18,7 +18,7 @@
  * layout-independent, so it stays correct if the room ever changes size.
  */
 
-import type { Background } from '../api/types'
+import type { Actor, Background } from '../api/types'
 import { FLOOR, VOID, WALL } from './types'
 import type {
   DecorPlacement,
@@ -34,14 +34,19 @@ import type {
 /** Empty border kept around the map so the wall pass always has room. */
 const MARGIN = 2
 /**
- * Interior size in tiles. Verified against `WorldCanvas.pickScale`
- * (`TARGET_TILES_ACROSS = 26`, `TARGET_TILES_DOWN = 15`, `MAX_SCALE = 6`): at
- * 30x18 the map covers 1280-, 1920- and 2560-wide viewports with no letterbox.
- * Do not shrink below roughly 28x16 or the black bars come back on a wide
- * display.
+ * Interior size in tiles. A hub is a lobby, not a field: at 30x18 it read as
+ * empty, so the room is deliberately tight and the walk to a gate is short.
+ *
+ * Verified against `WorldCanvas.pickScale` (`TARGET_TILES_ACROSS = 26`,
+ * `TARGET_TILES_DOWN = 15`, `MIN_SCALE = 2`, `MAX_SCALE = 6`), which takes the
+ * larger of the preferred scale and the scale that covers the viewport. At a
+ * 28x18 map: 1280x720 picks 3 (1344x864 covers), 1920x1080 picks 5 (2240x1440
+ * covers), 2560x1440 picks 6 (2688x1728 covers). Past ~2688 CSS px wide the
+ * `MAX_SCALE` clamp letterboxes regardless of map size, as it already did.
+ * Do not shrink below roughly 24x14 or the black bars come back at 1440p.
  */
-const INTERIOR_W = 30
-const INTERIOR_H = 18
+const INTERIOR_W = 24
+const INTERIOR_H = 14
 
 const MAP_W = INTERIOR_W + MARGIN * 2
 const MAP_H = INTERIOR_H + MARGIN * 2
@@ -54,8 +59,12 @@ const MAP_H = INTERIOR_H + MARGIN * 2
 const HOTSPOT_W = 3
 const HOTSPOT_H = 2
 
-/** Roughly one decor sprite per this many candidate floor tiles. */
-const TILES_PER_DECOR = 18
+/**
+ * Roughly one decor sprite per this many candidate floor tiles. Denser than the
+ * old 18 on purpose: a smaller room with the same density is just a smaller
+ * empty room.
+ */
+const TILES_PER_DECOR = 11
 /**
  * How many decor sprites the generator may pick from a biome's `decor` list.
  * Kept at 2 rather than `worldgen`'s 4: no biome in `vocabulary` carries more
@@ -70,11 +79,41 @@ const DECOR_SPRITES = 2
  * of learning gets which corner by ordering its list.
  */
 const SLOT_OFFSETS: readonly Point[] = [
-  { x: -10, y: -4 }, // slot 0 — left
-  { x: 0, y: -6 }, // slot 1 — far side
-  { x: 10, y: -4 }, // slot 2 — right
-  { x: 0, y: 6 }, // slot 3 — behind the player
+  { x: -8, y: -3 }, // slot 0 — left
+  { x: 0, y: -5 }, // slot 1 — far side
+  { x: 8, y: -3 }, // slot 2 — right
+  { x: 0, y: 4 }, // slot 3 — behind the player
 ]
+
+/**
+ * Where a guide stands relative to its arch: two tiles to the right, on the
+ * anchor row. Two rather than one so the guide clears the 3-wide hotspot, and
+ * the same for every slot so the renderer can derive the tile from `at` without
+ * the map having to carry a second point. Use `guideTileFor`, never a literal.
+ */
+const GUIDE_OFFSET: Point = { x: 2, y: 0 }
+
+/**
+ * Who stands beside each gate. Decoration with a job: the villager is the one
+ * who tells you things, the rival is the one who tests you, the owl is the one
+ * that asks you why. A sealed gate has nobody — there is nothing to explain yet.
+ */
+const GUIDE_BY_KIND: Record<PortalKind, Actor | null> = {
+  storybook: 'villager',
+  quiz: 'rival',
+  explain: 'mentor_owl',
+  sealed: null,
+}
+
+/**
+ * The floor tile a portal's guide stands on. Exported because the guide is not
+ * a `SceneNode` and carries no point of its own: the renderer needs this to
+ * draw it, and the decor scatter needs it to stay off the tile.
+ */
+export const guideTileFor = (portal: PortalNode): Point => ({
+  x: portal.at.x + GUIDE_OFFSET.x,
+  y: portal.at.y + GUIDE_OFFSET.y,
+})
 
 /** One doorway the caller wants placed. Carries labels, never content. */
 export interface HubPortalSpec {
@@ -213,6 +252,7 @@ export function buildHub(input: HubInput): WorldMap {
     .map((spec, index): PortalNode => {
       const offset = SLOT_OFFSETS[index]
       const at: Point = { x: spawn.x + offset.x, y: spawn.y + offset.y }
+      const guide = GUIDE_BY_KIND[spec.kind]
       return {
         kind: spec.kind,
         label: spec.label,
@@ -220,6 +260,10 @@ export function buildHub(input: HubInput): WorldMap {
         at,
         hotspot: { x: at.x - 1, y: at.y, w: HOTSPOT_W, h: HOTSPOT_H },
         locked: spec.locked,
+        // Purely decorative: the guide is not a node, blocks nothing and is
+        // deliberately outside the hotspot, so walking up to a gate behaves
+        // exactly as it did before anyone was standing there.
+        ...(guide ? { guide } : {}),
       }
     })
 
@@ -227,7 +271,8 @@ export function buildHub(input: HubInput): WorldMap {
   // The radiating stone paths of the concept art are negative space in this
   // scatter, not a tile type: exclude the straight walk from spawn to each
   // anchor (dilated by one so the lane reads as a lane), the pad the player
-  // spawns on, and each hotspot with a one-tile skirt. What is left is rock.
+  // spawns on, each hotspot with a one-tile skirt, and the tile each guide
+  // stands on with the same skirt. What is left is rock.
   const blocked = new Set<string>()
   const blockAround = (point: Point): void => {
     for (let dy = -1; dy <= 1; dy++) {
@@ -239,6 +284,7 @@ export function buildHub(input: HubInput): WorldMap {
   for (const portal of portals) {
     for (const tile of pathLine(spawn, portal.at)) blockAround(tile)
     for (const tile of rectTiles(portal.hotspot)) blockAround(tile)
+    if (portal.guide) blockAround(guideTileFor(portal))
   }
 
   const candidates: Point[] = []

@@ -95,6 +95,8 @@ export interface PortalNode {
   hotspot: Rect
   /** No content behind it, or content that failed to generate. Draws greyed. */
   locked: boolean
+  /** An idle character standing beside the gate, hinting at what is behind it. Purely decorative. */
+  guide?: Actor
 }
 
 export interface WorldMap {

@@ -18,10 +18,12 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { RefObject } from 'react'
+import { guideTileFor } from './hubgen'
 import { FLOOR, TILE, WALL, tileAt } from './types'
-import type { Anim, Biome, SceneNode, Still, WorldMap } from './types'
+import type { Anim, Biome, PortalKind, PortalNode, SceneNode, Still, WorldMap } from './types'
 import type { PlayerBody } from './usePlayer'
-import { actorArt, biomeFor, propArt } from './vocabulary'
+import type { PortalArt } from './vocabulary'
+import { actorArt, biomeFor, portalArt, propArt } from './vocabulary'
 
 /** The learner walks the world as the explorer; the other actors stand at their scenes. */
 const PLAYER_ACTOR = 'explorer'
@@ -41,14 +43,106 @@ const PROP_OFFSETS = [
   { x: 0, y: -1 },
 ]
 
+/**
+ * `portal_arch.png` is a 32x48 stone archway with a single hollow opening — one
+ * gate, one hole, not the two leaves `doorway_pair.png` had. Everything below is
+ * read off the file's own pixels rather than guessed:
+ *
+ *  - the masonry occupies rows 2..45, so dropping the sprite by 2 puts the feet
+ *    of the pillars exactly on the tile's foot line and leaves the two rows of
+ *    base shadow below it;
+ *  - the hollow is the span enclosed by the innermost masonry on each row. It is
+ *    columns 4..27 from row 7 down to row 45 — 24 wide, an arch whose head is a
+ *    half-circle of radius 12 springing from row 27 (checked against the art:
+ *    the curve is 20px wide at row 12 and 24px wide at row 17, which is what a
+ *    radius-12 semicircle gives to within half a pixel).
+ */
+const GATE_DROP = 2
+/** The hollow, in source pixels relative to the tile's foot line. */
+const GATE_OPENING = { w: 24, top: -39, bottom: 0 }
+/**
+ * `portal_arch.png` is an *opaque* slice of the tileset: the black outside the
+ * arch is as solid as the black inside it, so blitting the file whole punches a
+ * 32x48 rectangle out of the floor. These are the columns the masonry really
+ * occupies on each row of the head — read off the same pixels — and the clip
+ * built from them keeps the slab to the shape of the arch. The hollow stays
+ * black on purpose: it is the hole the vortex is painted into.
+ */
+const ARCH_HEAD: ReadonlyArray<readonly [row: number, from: number, to: number]> = [
+  [2, 11, 21],
+  [3, 9, 23],
+  [4, 7, 25],
+  [5, 6, 26],
+  [6, 5, 27],
+  [7, 4, 28],
+  [8, 3, 29],
+  [9, 2, 30],
+  [10, 2, 30],
+]
+/** Below the head the arch is the full width of the sprite, down to the foot line. */
+const ARCH_BODY = { top: 11, bottom: 46 }
+/**
+ * Lantern centres. The plan says `at.x - 1` and `at.x + 2`, which flanks a gate
+ * drawn from the tile's left edge; the art is drawn *centred* on the tile, so
+ * the same flank is a tile and a half either side of centre.
+ */
+const GATE_LANTERNS = [-TILE * 1.5, TILE * 1.5]
+/** A locked gate keeps its shape but loses its colour. */
+const LOCKED_RIM = '#9aa1ad'
+
+// --- the vortex ------------------------------------------------------------
+// Nested oval arcs around a hot centre, each one turning at its own rate and
+// swinging around the middle by its own amount. The differential is the whole
+// trick: rings turning in lockstep read as a target, rings turning faster the
+// closer they get to the middle read as something being pulled down a hole.
+
+/** Centre of the swirl, in source pixels relative to the foot line. */
+const VORTEX_CENTRE_Y = -21
+/** How many rings. Five is enough to read as depth and cheap enough to redraw. */
+const VORTEX_RINGS = 5
+/** Widest ring, in source pixels. Two short of the hollow so it never kisses stone. */
+const VORTEX_RADIUS = 10
+/** Rings are taller than wide: the hollow is an arch, not a porthole. */
+const VORTEX_SQUASH = 1.5
+/** Flakes orbiting outside the rings. Positions come from the index, never a PRNG. */
+const VORTEX_FLAKES = 7
+/** The golden angle, so the flakes never clump however many there are. */
+const FLAKE_SPREAD = 2.399963
+
+/**
+ * Scene-node completion is dead on a hub map (`nodes: []`), and the props now
+ * carry portal kinds rather than scene ids. Legacy chapter maps therefore draw
+ * every marker as unvisited until the node path is deleted after the demo.
+ */
+const NO_COMPLETED_SCENES: ReadonlySet<string> = new Set<string>()
+
 export interface WorldCanvasProps {
   map: WorldMap
   /** Live player state, read once per frame. */
   player: RefObject<PlayerBody>
-  /** Scene ids the learner has finished. */
-  completed: ReadonlySet<string>
-  /** The node the player is standing on, highlighted harder than the rest. */
-  activeSceneId: string | null
+  /** Modes of learning the player has finished. */
+  cleared: ReadonlySet<PortalKind>
+  /** The gate the player is standing at, lit harder than the rest. */
+  activePortal: PortalKind | null
+}
+
+/**
+ * Re-alpha a colour from the portal table. Gradients have to fade to the *same*
+ * hue at zero alpha: canvas interpolates colour stops un-premultiplied, so a
+ * fade to `transparent` runs through black and turns amber light into mud.
+ */
+function withAlpha(colour: string, alpha: number): string {
+  const hex = /^#([0-9a-f]{6})$/i.exec(colour.trim())
+  if (hex) {
+    const packed = Number.parseInt(hex[1], 16)
+    return `rgba(${(packed >> 16) & 255}, ${(packed >> 8) & 255}, ${packed & 255}, ${alpha})`
+  }
+  const rgb = /^rgba?\(([^)]+)\)$/i.exec(colour.trim())
+  if (rgb) {
+    const parts = rgb[1].split(',').map((part) => Number.parseFloat(part))
+    return `rgba(${parts[0]}, ${parts[1]}, ${parts[2]}, ${alpha})`
+  }
+  return colour
 }
 
 // --- image preloading ------------------------------------------------------
@@ -84,6 +178,16 @@ function sourcesFor(map: WorldMap): string[] {
       const art = propArt(prop)
       if (art.kind === 'sprite') sources.add(art.sprite.src)
     }
+  }
+
+  // Never cut this loop: without it the gates are missing images and the hub
+  // reads as broken rather than unfinished. The guide beside a gate is loaded
+  // here too — it is not a `SceneNode`, so the node loop above never sees it.
+  for (const portal of map.portals) {
+    const art = portalArt(portal.kind)
+    sources.add(art.frame.src)
+    if (art.lantern) sources.add(art.lantern.src)
+    if (portal.guide) sources.add(actorArt(portal.guide).idle.src)
   }
 
   return [...sources]
@@ -166,7 +270,7 @@ function resolveDecor(biome: Biome, key: string): Still | null {
 
 // --- component -------------------------------------------------------------
 
-export function WorldCanvas({ map, player, completed, activeSceneId }: WorldCanvasProps) {
+export function WorldCanvas({ map, player, cleared, activePortal }: WorldCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const wrapperRef = useRef<HTMLDivElement | null>(null)
   // Keyed by the map it was loaded for, so a new map reads as "not ready yet"
@@ -177,12 +281,12 @@ export function WorldCanvas({ map, player, completed, activeSceneId }: WorldCanv
   const roomIndex = useMemo(() => buildRoomIndex(map), [map])
   const biomes = useMemo(() => map.rooms.map((room) => biomeFor(room.background)), [map])
   // Frame-local inputs the loop must see without being torn down and rebuilt.
-  const completedRef = useRef(completed)
-  const activeRef = useRef(activeSceneId)
+  const clearedRef = useRef(cleared)
+  const activeRef = useRef(activePortal)
   useEffect(() => {
-    completedRef.current = completed
-    activeRef.current = activeSceneId
-  }, [completed, activeSceneId])
+    clearedRef.current = cleared
+    activeRef.current = activePortal
+  }, [cleared, activePortal])
 
   // Preload every sprite before the first paint: a world that pops in tile by
   // tile on stage looks broken even though it is only slow.
@@ -354,6 +458,267 @@ export function WorldCanvas({ map, player, completed, activeSceneId }: WorldCanv
       ctx.restore()
     }
 
+    /**
+     * The arch's silhouette in sprite-local pixels, built once and reused under
+     * a translate for every gate on every frame.
+     */
+    const silhouette = new Path2D()
+    for (const [row, from, to] of ARCH_HEAD) silhouette.rect(from, row, to - from, 1)
+    silhouette.rect(0, ARCH_BODY.top, 32, ARCH_BODY.bottom - ARCH_BODY.top)
+
+    /** The masonry, blitted through that silhouette so its black corners never land. */
+    const drawArchFrame = (still: Still, centreX: number, footY: number) => {
+      const sprite = image(still.src)
+      if (!sprite) return
+      ctx.save()
+      ctx.translate(Math.round(centreX - still.w / 2), Math.round(footY + GATE_DROP - still.h))
+      ctx.clip(silhouette)
+      ctx.drawImage(sprite, 0, 0, still.w, still.h)
+      ctx.restore()
+    }
+
+    /** The hollow: straight sides, semicircular head. World pixels. */
+    const archPath = (centreX: number, footY: number) => {
+      const half = GATE_OPENING.w / 2
+      const bottom = footY + GATE_OPENING.bottom
+      const top = footY + GATE_OPENING.top
+      ctx.beginPath()
+      ctx.moveTo(centreX - half, bottom)
+      ctx.lineTo(centreX - half, top + half)
+      ctx.arc(centreX, top + half, half, Math.PI, 0)
+      ctx.lineTo(centreX + half, bottom)
+      ctx.closePath()
+    }
+
+    /**
+     * The wash that gives the hollow depth, built once per colour and reused for
+     * every gate of that kind on every frame. The stops are authored at the
+     * origin and the gradient is painted under a translate, so one object serves
+     * them all; the breathing is done with `globalAlpha` rather than by
+     * rebuilding colour stops sixty times a second.
+     */
+    const glows = new Map<string, CanvasGradient>()
+    const vortexGlow = (colour: string): CanvasGradient => {
+      const cached = glows.get(colour)
+      if (cached) return cached
+      const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, VORTEX_RADIUS * VORTEX_SQUASH)
+      gradient.addColorStop(0, withAlpha(colour, 0.9))
+      gradient.addColorStop(0.35, withAlpha(colour, 0.22))
+      gradient.addColorStop(1, withAlpha(colour, 0))
+      glows.set(colour, gradient)
+      return gradient
+    }
+
+    /**
+     * What is actually behind the stone: a whirlpool of light, clipped to the
+     * hollow so nothing spills onto the masonry and composited with `lighter` so
+     * it *adds* to the sprite's black interior instead of painting a coloured
+     * rectangle over it.
+     *
+     * Nothing here is random. Every ring and every flake derives its position
+     * from its index and the clock, so two runs of the same second draw the same
+     * frame and the renderer stays reproducible.
+     */
+    const drawVortex = (art: PortalArt, centreX: number, footY: number, seconds: number, intensity: number) => {
+      ctx.save()
+      archPath(centreX, footY)
+      ctx.clip()
+      ctx.globalCompositeOperation = 'lighter'
+      ctx.translate(centreX, footY + VORTEX_CENTRE_Y)
+
+      // 1. Depth. Brightest at the eye, gone by the time it reaches the stone.
+      ctx.globalAlpha = 0.55 * intensity
+      ctx.fillStyle = vortexGlow(art.core)
+      ctx.fillRect(-GATE_OPENING.w, -GATE_OPENING.w, GATE_OPENING.w * 2, GATE_OPENING.w * 2)
+
+      // 2. The rings. Each is an arc, not a closed oval: the gap is what shows
+      //    the rotation. Inner rings turn faster and swing further off centre —
+      //    that differential is the difference between a vortex and a target.
+      ctx.lineCap = 'round'
+      for (let i = 0; i < VORTEX_RINGS; i += 1) {
+        const t = (i + 1) / VORTEX_RINGS
+        const radius = VORTEX_RADIUS * t
+        const spin = seconds * (1.6 / t) + i * 0.9
+        const drift = (1 - t) * 2.2
+        // Alternating bands: the rim colour is the lighter tint of the core.
+        ctx.strokeStyle = i % 2 === 0 ? art.rim : art.core
+        ctx.lineWidth = i % 2 === 0 ? 1 : 2
+        ctx.globalAlpha = intensity * (0.85 - t * 0.4) * (0.75 + 0.25 * Math.sin(seconds * 2.4 + i))
+        ctx.beginPath()
+        ctx.ellipse(
+          Math.cos(spin) * drift,
+          Math.sin(spin) * drift * VORTEX_SQUASH,
+          radius,
+          radius * VORTEX_SQUASH,
+          0,
+          spin,
+          spin + Math.PI * 1.45,
+        )
+        ctx.stroke()
+      }
+
+      // 3. The eye: small, hot, breathing.
+      const eye = 1.5 + 0.7 * (0.5 + 0.5 * Math.sin(seconds * 1.8))
+      ctx.globalAlpha = intensity
+      ctx.fillStyle = art.rim
+      ctx.beginPath()
+      ctx.ellipse(0, 0, eye, eye * 1.25, 0, 0, Math.PI * 2)
+      ctx.fill()
+
+      // 4. Flakes torn off the outside of the rings. Whole pixels, so they stay
+      //    square blocks at any zoom instead of blurring into grey.
+      ctx.fillStyle = art.rim
+      for (let i = 0; i < VORTEX_FLAKES; i += 1) {
+        const spin = seconds * (0.85 + (i % 3) * 0.22) + i * FLAKE_SPREAD
+        const orbit = VORTEX_RADIUS + 0.8 + (i % 3) * 0.5 + Math.sin(seconds * 1.7 + i) * 0.8
+        ctx.globalAlpha = intensity * (0.3 + 0.45 * (0.5 + 0.5 * Math.sin(seconds * 2.6 + i * 1.7)))
+        ctx.fillRect(
+          Math.round(Math.cos(spin) * orbit),
+          Math.round(Math.sin(spin) * orbit * VORTEX_SQUASH),
+          i % 3 === 0 ? 2 : 1,
+          i % 3 === 0 ? 2 : 1,
+        )
+      }
+
+      ctx.restore()
+    }
+
+    /**
+     * The 8x8 glyph that says what is behind a gate. Geometry, never `fillText`:
+     * type aliases into mush at 1x source pixels with smoothing off, and the
+     * label the learner actually reads lives in the DOM prompt anyway.
+     */
+    const drawGlyph = (icon: PortalArt['icon'], cx: number, cy: number, colour: string) => {
+      ctx.save()
+      ctx.fillStyle = colour
+      ctx.strokeStyle = colour
+      ctx.lineWidth = 1
+
+      if (icon === 'book') {
+        // Three stacked lines with a spine down the middle.
+        for (const dy of [-3, 0, 3]) ctx.fillRect(cx - 4, cy + dy, 8, 1)
+        ctx.fillRect(cx - 0.5, cy - 4, 1, 8)
+      } else if (icon === 'question') {
+        // Two chevrons over a dot.
+        for (const dy of [0, 3]) {
+          ctx.beginPath()
+          ctx.moveTo(cx - 3, cy - 1 + dy)
+          ctx.lineTo(cx, cy - 4 + dy)
+          ctx.lineTo(cx + 3, cy - 1 + dy)
+          ctx.stroke()
+        }
+        ctx.fillRect(cx - 1, cy + 3, 2, 2)
+      } else if (icon === 'speech') {
+        // Two overlapping bubbles: a conversation, not a monologue.
+        for (const bubble of [
+          { x: cx - 4, y: cy - 4, w: 7, h: 5 },
+          { x: cx - 1, y: cy - 1, w: 5, h: 4 },
+        ]) {
+          ctx.beginPath()
+          if (typeof ctx.roundRect === 'function') ctx.roundRect(bubble.x, bubble.y, bubble.w, bubble.h, 1.5)
+          else ctx.rect(bubble.x, bubble.y, bubble.w, bubble.h)
+          ctx.fill()
+        }
+      } else {
+        // A padlock: body plus a stroked shackle.
+        ctx.beginPath()
+        ctx.arc(cx, cy - 1, 2.2, Math.PI, 0)
+        ctx.stroke()
+        ctx.fillRect(cx - 3, cy - 1, 6, 5)
+      }
+      ctx.restore()
+    }
+
+    /**
+     * A gate into one mode of learning: real masonry with light drawn into it.
+     * Layers run cheapest first on purpose — the ground pool alone already reads
+     * as a portal, and everything after it is polish.
+     */
+    const drawPortal = (portal: PortalNode, seconds: number, cleared: boolean, active: boolean) => {
+      const art = portalArt(portal.kind)
+      const centreX = portal.at.x * TILE + TILE / 2
+      const footY = portal.at.y * TILE + TILE
+      const breath = 0.5 + 0.5 * Math.sin(seconds * 1.8)
+      const locked = portal.locked
+
+      ctx.save()
+      if (locked) ctx.globalAlpha = 0.45
+
+      // 1. The masonry, first rather than last: the sprite is opaque, so
+      //    anything drawn under it is simply gone.
+      drawArchFrame(art.frame, centreX, footY)
+
+      // 2. The pool of light on the ground. Ten lines, and the single thing that
+      //    makes the floor look lit rather than merely painted. Drawn over the
+      //    slab so the foot of each pillar catches the light it is standing in.
+      if (!locked && !cleared) {
+        const radius = TILE * 1.5 + breath * (active ? 7 : 4)
+        ctx.save()
+        ctx.globalCompositeOperation = 'lighter'
+        ctx.translate(centreX, footY - 2)
+        ctx.scale(1, 0.42)
+        const pool = ctx.createRadialGradient(0, 0, 0, 0, 0, radius)
+        pool.addColorStop(0, withAlpha(art.glow, (active ? 0.9 : 0.65) * (0.65 + breath * 0.35)))
+        pool.addColorStop(1, withAlpha(art.glow, 0))
+        ctx.fillStyle = pool
+        ctx.beginPath()
+        ctx.arc(0, 0, radius, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.restore()
+      }
+
+      // Cleared: the steady teal ring `drawMarker` gives a finished node,
+      // widened to the gate. No breathing — done work should not ask for attention.
+      if (cleared) {
+        ctx.save()
+        ctx.lineWidth = 1
+        ctx.strokeStyle = 'rgba(79, 219, 200, 0.75)'
+        ctx.beginPath()
+        ctx.ellipse(centreX, footY - 2, TILE * 1.25, TILE * 0.5, 0, 0, Math.PI * 2)
+        ctx.stroke()
+        ctx.restore()
+      }
+
+      // 3. The vortex behind the stone. A sealed gate stays a hole in the wall:
+      //    there is nothing on the other side to swirl.
+      if (!locked) drawVortex(art, centreX, footY, seconds, cleared ? 0.5 : active ? 1 : 0.82)
+
+      // 4. The rim. Load-bearing: it is the one edge that survives the biome
+      //    tint multiplied over the room.
+      ctx.save()
+      ctx.lineWidth = active && !locked ? 2 : 1
+      ctx.strokeStyle = locked ? LOCKED_RIM : art.rim
+      archPath(centreX, footY)
+      ctx.stroke()
+      ctx.restore()
+
+      // 5. Lanterns, when the kind carries any. A sealed gate gives off no light.
+      if (art.lantern && !locked) {
+        for (const offset of GATE_LANTERNS) drawStill(art.lantern, centreX + offset, footY)
+      }
+
+      // 6. The glyph, bobbing above the gate — or a tick once it is cleared,
+      //    the same one `drawMarker` draws over a finished node. It clears the
+      //    keystone: the masonry starts at row 2 of a 48px sprite dropped by
+      //    `GATE_DROP`, so the top of the arch is 44 source pixels up.
+      const glyphY = footY - 53 + Math.sin(seconds * 2.2) * 1.5
+      if (cleared) {
+        ctx.save()
+        ctx.strokeStyle = '#4fdbc8'
+        ctx.lineWidth = 1.5
+        ctx.beginPath()
+        ctx.moveTo(centreX - 4, glyphY)
+        ctx.lineTo(centreX - 1, glyphY + 3)
+        ctx.lineTo(centreX + 4, glyphY - 4)
+        ctx.stroke()
+        ctx.restore()
+      } else {
+        drawGlyph(locked ? 'lock' : art.icon, centreX, glyphY, locked ? LOCKED_RIM : art.rim)
+      }
+
+      ctx.restore()
+    }
+
     const drawProps = (node: SceneNode, seconds: number) => {
       node.props.forEach((prop, i) => {
         const offset = PROP_OFFSETS[i % PROP_OFFSETS.length]
@@ -448,17 +813,40 @@ export function WorldCanvas({ map, player, completed, activeSceneId }: WorldCanv
         if (still) drawStill(still, placement.at.x * TILE + TILE / 2, placement.at.y * TILE + TILE)
       }
 
+      // 5. The gates. Drawn after the tint multiply so their light is never
+      //    dimmed by it — the difference between glowing and muddy.
+      for (const portal of map.portals) {
+        if (portal.at.x < x0 - 3 || portal.at.x > x1 + 3 || portal.at.y < y0 - 3 || portal.at.y > y1 + 3) continue
+        drawPortal(portal, seconds, clearedRef.current.has(portal.kind), activeRef.current === portal.kind)
+      }
+
+      // 5b. The guides. Pure decoration — an idle body beside each gate that
+      //     says what is behind it without a word of text. Drawn after the
+      //     arches so they stand *in* the light rather than under it, and before
+      //     the player so walking past one reads correctly in depth. The tile
+      //     comes from `hubgen` so the two can never drift apart.
+      for (const portal of map.portals) {
+        if (!portal.guide) continue
+        const tile = guideTileFor(portal)
+        if (tile.x < x0 - 3 || tile.x > x1 + 3 || tile.y < y0 - 3 || tile.y > y1 + 3) continue
+        const centreX = tile.x * TILE + TILE / 2
+        const footY = tile.y * TILE + TILE
+        drawShadow(centreX, footY)
+        drawAnim(actorArt(portal.guide).idle, centreX, footY, seconds, false)
+      }
+
       const visibleNodes = map.nodes.filter(
         (node) => node.at.x >= x0 - 2 && node.at.x <= x1 + 2 && node.at.y >= y0 - 2 && node.at.y <= y1 + 2,
       )
 
-      // 5. Props, 6. markers, 7. actors — each scene as one little tableau.
+      // 6. Props, 7. markers, 8. actors — each scene as one little tableau.
+      //    All three are inert on a hub map, which carries `nodes: []`.
       for (const node of visibleNodes) drawProps(node, seconds)
 
       for (const node of visibleNodes) {
         const centreX = node.at.x * TILE + TILE / 2
         const footY = node.at.y * TILE + TILE
-        drawMarker(centreX, footY, seconds, completedRef.current.has(node.sceneId), activeRef.current === node.sceneId)
+        drawMarker(centreX, footY, seconds, NO_COMPLETED_SCENES.has(node.sceneId), false)
       }
 
       for (const node of visibleNodes) {
@@ -468,7 +856,7 @@ export function WorldCanvas({ map, player, completed, activeSceneId }: WorldCanv
         drawAnim(actorArt(node.actor).idle, centreX, footY, seconds, false)
       }
 
-      // 8. The player, on top of the world they are walking through.
+      // 9. The player, on top of the world they are walking through.
       const art = actorArt(PLAYER_ACTOR)
       const anim = body.moving && art.run ? art.run : art.idle
       const playerX = body.x * TILE
@@ -505,7 +893,7 @@ export function WorldCanvas({ map, player, completed, activeSceneId }: WorldCanv
       <canvas
         ref={canvasRef}
         role="img"
-        aria-label={`${map.title}: a pixel-art world with ${map.nodes.length} scenes. Walk with the arrow keys or WASD.`}
+        aria-label={`${map.title}: a pixel-art world with ${map.portals.length} gates and ${map.nodes.length} scenes. Walk with the arrow keys or WASD.`}
         className="block h-full w-full [image-rendering:pixelated]"
       />
       {!images && (
