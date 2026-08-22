@@ -22,7 +22,7 @@ Naming (Minecraft analogy): a **Server** is a class/course (name, join code, pub
 
 ### Onboarding
 1. `POST /auth/register` (or `POST /auth/login`) → store `token`.
-2. `PATCH /auth/me` with `role`, `industry`, `about`, `pet` from the tutorial screens.
+2. `PATCH /auth/me` with `role`, `industry`, `about` from the personalised questions.
 3. `GET /servers` → my servers. Empty? Offer create or join.
 
 ### Create a server (teacher / uploader)
@@ -81,7 +81,7 @@ Naming (Minecraft analogy): a **Server** is a class/course (name, join code, pub
     "id": "3f2a9c1e8b7d4e6f9a0b1c2d3e4f5a6b",
     "email": "ada@example.com",
     "display_name": "Ada Lovelace",
-    "role": null, "industry": null, "about": null, "pet": null,
+    "role": null, "industry": null, "about": null,
     "created_at": "2026-08-22T09:15:00Z"
   }
 }
@@ -91,13 +91,13 @@ Password must be ≥ 8 chars. `POST /auth/login` takes `{email, password}` and r
 ### `PATCH /auth/me`
 ```json
 // request: only keys present are changed
-{ "display_name": "Ada L.", "role": "student", "industry": "Software", "about": "Second-year CS student.", "pet": "fox" }
+{ "display_name": "Ada L.", "role": "student", "industry": "Software", "about": "Second-year CS student." }
 // response: User
 { "id": "3f2a9c1e8b7d4e6f9a0b1c2d3e4f5a6b", "email": "ada@example.com", "display_name": "Ada L.",
-  "role": "student", "industry": "Software", "about": "Second-year CS student.", "pet": "fox",
+  "role": "student", "industry": "Software", "about": "Second-year CS student.",
   "created_at": "2026-08-22T09:15:00Z" }
 ```
-`role` is `"student" | "teacher"`. `pet` is a free string (≤ 32 chars); the design decides the sprite set.
+`role` is `"student" | "teacher"`. Users have no pet: the pet belongs to the server (see below).
 
 ### `POST /servers` (multipart) → 201
 | Field | Type | Notes |
@@ -225,11 +225,11 @@ Public listing: only `ready` public servers, and `join_code` is **absent** from 
 ```json
 {
   "server_id": "9c1e8b7d4e6f9a0b1c2d3e4f5a6b3f2a",
-  "me": { "rank": 3, "user_id": "3f2a9c1e8b7d4e6f9a0b1c2d3e4f5a6b", "display_name": "Ada L.", "pet": "fox", "xp": 42, "attempts": 6 },
+  "me": { "rank": 3, "user_id": "3f2a9c1e8b7d4e6f9a0b1c2d3e4f5a6b", "display_name": "Ada L.", "xp": 42, "attempts": 6 },
   "entries": [
-    { "rank": 1, "user_id": "0b1c2d3e4f5a6b3f2a9c1e8b7d4e6f9a", "display_name": "Grace", "pet": "owl", "xp": 95, "attempts": 11 },
-    { "rank": 2, "user_id": "1c2d3e4f5a6b3f2a9c1e8b7d4e6f9a0b", "display_name": "Linus", "pet": null, "xp": 60, "attempts": 8 },
-    { "rank": 3, "user_id": "3f2a9c1e8b7d4e6f9a0b1c2d3e4f5a6b", "display_name": "Ada L.", "pet": "fox", "xp": 42, "attempts": 6 }
+    { "rank": 1, "user_id": "0b1c2d3e4f5a6b3f2a9c1e8b7d4e6f9a", "display_name": "Grace", "xp": 95, "attempts": 11 },
+    { "rank": 2, "user_id": "1c2d3e4f5a6b3f2a9c1e8b7d4e6f9a0b", "display_name": "Linus", "xp": 60, "attempts": 8 },
+    { "rank": 3, "user_id": "3f2a9c1e8b7d4e6f9a0b1c2d3e4f5a6b", "display_name": "Ada L.", "xp": 42, "attempts": 6 }
   ]
 }
 ```
@@ -395,7 +395,7 @@ Quest and gauntlet from the same world share `graph_id` (`wk3ml0a1` in the fixtu
 - **`games.gauntlet` can be `null` independently** of `games.quest` on a `ready` world (degraded mode when gauntlet generation failed). Hide the Conquest/boss entry, do not crash.
 - **The client never sends `correct`.** The server grades `option_id` against the stored game JSON.
 - **XP only on the first attempt per scene** (per user, world, scene). Repeats are stored with `xp_awarded: 0`. Correct 10 XP, wrong 2 XP, explain pass 25 / partial 10.
-- **The server `pet` is the mascot** rendered whenever a dialogue `speaker === "mentor_owl"`. The user's own `pet` (from `PATCH /auth/me`) is their avatar on leaderboards.
+- **The server `pet` is the mascot** that asks the questions: render it whenever a dialogue `speaker === "mentor_owl"`. It is a free string (≤ 32 chars); the design decides the sprite set. Users have no pet.
 - **Lives and timer for the gauntlet are frontend-only.** The API only records attempts.
 - **`join_code` is omitted on `GET /servers/public`** (type is `join_code?: string`). It is present on `GET /servers` and `GET /servers/{id}` for members.
 - **CORS allows `http://localhost:5173`** (Vite default port, fixed in `vite.config.ts`) and the prod web origin. Other origins get blocked by the browser, not a 4xx.
