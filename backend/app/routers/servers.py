@@ -19,6 +19,17 @@ from app.services import generate, ingest, progress
 router = APIRouter(prefix="/servers", tags=["servers"])
 
 
+def _read_upload(file: UploadFile, max_bytes: int) -> bytes:
+    """Read no more than one byte beyond the configured upload limit."""
+    data = file.file.read(max_bytes + 1)
+    if len(data) > max_bytes:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            f"{file.filename} exceeds {max_bytes // (1024 * 1024)} MB",
+        )
+    return data
+
+
 # ------------------------------------------------------------------ helpers
 
 
@@ -138,10 +149,7 @@ def create_server(
     max_bytes = s.max_upload_mb * 1024 * 1024
     items: list[tuple[str, bytes]] = []
     for f in files:
-        data = f.file.read()
-        if len(data) > max_bytes:
-            raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                                f"{f.filename} exceeds {s.max_upload_mb} MB")
+        data = _read_upload(f, max_bytes)
         items.append((f.filename, data))
 
     try:
@@ -167,16 +175,20 @@ def create_server(
     n_files = len(items)
     document_rows: list[models.Document] = []
     for i, doc in enumerate(docs):
+        document_id = new_id()
         stored_path = None
         if i < n_files:
-            filename, data = items[i]
+            _filename, data = items[i]
             doc_dir = s.uploads_dir / server.id
             doc_dir.mkdir(parents=True, exist_ok=True)
-            path = doc_dir / filename
+            # The multipart filename is attacker-controlled metadata. Use a
+            # server-generated name so absolute paths and traversal segments
+            # can never affect the storage destination.
+            path = doc_dir / document_id
             path.write_bytes(data)
             stored_path = str(path)
         d = models.Document(
-            id=new_id(), server_id=server.id, filename=doc.filename,
+            id=document_id, server_id=server.id, filename=doc.filename,
             content_type=doc.content_type, char_count=doc.char_count,
             stored_path=stored_path, created_at=now,
         )
