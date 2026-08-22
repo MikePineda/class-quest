@@ -6,19 +6,26 @@
  * and the grading is the server's. What it adds is only the shape of a quiz: an
  * index, a score, and a threshold.
  *
- * Three things are deliberate and worth not "fixing":
+ * It mounts its own `VisualNovelShell`. The rival who stands beside the arch on
+ * the map is the one asking, the question is their line, and the props the scene
+ * declared are the picture above it. Nothing about the mechanism moved:
  *
- * - **Locking in is a separate button.** Clicking an option never advances.
- *   Owning the guess before being corrected is the whole pedagogical claim; an
- *   auto-revealing click turns the correction into trivia feedback.
+ * - **Locking in is a separate button.** Clicking an option never advances, and
+ *   the number keys — `VnChoiceRow`'s, now, rather than a second listener here —
+ *   only move the selection. Owning the guess before being corrected is the
+ *   whole pedagogical claim; an auto-revealing click turns the correction into
+ *   trivia feedback.
  * - **The correction and the source quote share one screen.** Question, result,
- *   correction and quote are a single view with a single way forward, so a
- *   question costs a selection, a lock-in and a next — nothing else.
+ *   correction, quote and the rest of the class are a single view with a single
+ *   way forward, so a question costs a selection, a lock-in and a next.
  * - **The attempt is posted with `archetype: 'gauntlet'`**, by the shared commit
  *   path in `WorldExperience`. These scene ids live in the gauntlet game, not
  *   the quest, and the server looks the scene up by `(world, archetype,
  *   scene_id)` — naming the wrong archetype grades against a scene that does not
  *   exist.
+ * - **The class is echoed off the *committed* option, never the selected one.**
+ *   `CohortEcho` renders nothing without one, which is what structurally stops
+ *   the room's answers from appearing before the learner has owned theirs.
  *
  * Nothing here is persisted locally: every outcome comes from the session in
  * `WorldExperience` (this render's commits) or from `GET /progress` (previous
@@ -26,32 +33,44 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { CourseGraph, Game, Option, PredictionScene, SceneProgress } from '../api/types'
+import type { CohortOut, CourseGraph, Game, Option, PredictionScene, SceneProgress } from '../api/types'
+import { CohortEcho } from './cohort'
+import { quizThreshold } from './gating'
 import { diagnose } from './pedagogy'
-import { DiagnosisStage, filled, Insight, PredictionStage } from './SceneStages'
+import { DiagnosisStage, filled, Insight, RewardNote } from './SceneStages'
 import type { SceneOutcome, SourceQuoteProps } from './SceneStages'
+import { SceneIllustration, VisualNovelShell, VnChoiceRow } from './vn'
+import type { VnChoice } from './vn'
 
 /**
- * Four correct in five, rounded up, and never zero.
+ * Correct answers needed to clear the run: `gating.ts`'s own threshold, which is
+ * where the ratio lives and where the honesty note about it lives too.
  *
- * The rounding is not a detail: on a three-question run `ceil(0.8 * 3)` is 3, so
- * the portal demands a clean sweep. That is why every string below quotes the
- * threshold as a count of questions instead of promising "80%" — the percentage
- * would be a promise the arithmetic does not keep.
- *
- * The threshold itself is client-side and cosmetic: correctness is graded and
- * stored by the server, but *clearing a portal* is a browser-side idea and no
- * XP, leaderboard position or teacher-facing number may ever depend on it. When
- * `gating.ts` lands it owns this constant and this file imports it.
+ * The rounding is not a detail: on a three-question run it is 3, so the portal
+ * demands a clean sweep. That is why every string below quotes the threshold as
+ * a count of questions instead of promising "80%" — the percentage would be a
+ * promise the arithmetic does not keep.
  */
-const QUIZ_PASS_RATIO = 0.8
-const passMark = (total: number) => Math.max(1, Math.ceil(QUIZ_PASS_RATIO * total))
+const passMark = quizThreshold
 
 /** The quote for a committed answer, or null when the generator matched none. */
 const sourceOf = (outcome: SceneOutcome): SourceQuoteProps | null => {
   const evidence = outcome.diagnosis.evidence
   if (!evidence || !filled(evidence.quote)) return null
   return { quote: evidence.quote, segment: evidence.segment_id, title: outcome.diagnosis.sourceTitle }
+}
+
+/**
+ * How each option should look once the answer is out.
+ *
+ * Before the commit every option is neutral: the row may not carry a single bit
+ * of the answer, because the learner has not paid for it yet.
+ */
+function toneOf(option: Option, outcome: SceneOutcome | null): VnChoice['tone'] {
+  if (!outcome) return 'neutral'
+  const chosen = option.id === outcome.optionId
+  if (option.correct) return 'correct'
+  return chosen ? 'incorrect' : 'muted'
 }
 
 export interface QuizPanelProps {
@@ -65,6 +84,13 @@ export interface QuizPanelProps {
   restored: Record<string, SceneProgress>
   /** An attempt is in flight; the lock-in button locks. */
   committing: boolean
+  /**
+   * `GET /servers/{id}/cohort`, or null while loading / when the request failed.
+   * Read-only garnish: it reports how the class answered and gates nothing.
+   */
+  cohort?: CohortOut | null
+  /** World XP as the server knows it. Null shows nothing rather than a zero. */
+  xp?: number | null
   /** The shared commit path: posts the attempt, grades it, updates the session. */
   onCommit: (scene: PredictionScene, option: Option) => void
   /** Forget these commits so the questions can be answered again. */
@@ -78,6 +104,8 @@ export function QuizPanel({
   outcomes,
   restored,
   committing,
+  cohort = null,
+  xp = null,
   onCommit,
   onRetry,
   onClose,
@@ -156,6 +184,7 @@ export function QuizPanel({
 
   const total = questions.length
   const rightCount = graded.filter((entry) => entry.outcome?.diagnosis.correct === true).length
+  const answeredCount = graded.filter((entry) => entry.outcome !== null).length
   const missed = graded.filter(
     (entry): entry is { question: PredictionScene; outcome: SceneOutcome } =>
       entry.outcome !== null && !entry.outcome.diagnosis.correct,
@@ -180,12 +209,25 @@ export function QuizPanel({
   }, [])
 
   /** Locking in is the only thing that scrolls: revisiting a question does not. */
-  const commit = useCallback(
-    (scene: PredictionScene, option: Option) => {
-      scrollToResult.current = true
-      onCommit(scene, option)
+  const commit = useCallback(() => {
+    if (!question || outcome || !selectedId || committing) return
+    const option = question.options.find((candidate) => candidate.id === selectedId)
+    if (!option) return
+    scrollToResult.current = true
+    onCommit(question, option)
+  }, [question, outcome, selectedId, committing, onCommit])
+
+  /**
+   * Selection, and only while the question is still open. Once an answer is
+   * committed the row is locked and a click on it must change nothing — the
+   * commit is the last word on that question.
+   */
+  const select = useCallback(
+    (optionId: string) => {
+      if (outcome) return
+      setSelectedId(optionId)
     },
-    [onCommit],
+    [outcome],
   )
 
   useEffect(() => {
@@ -204,31 +246,11 @@ export function QuizPanel({
     scrollToResult.current = false
   }, [missed, onRetry, questions])
 
-  /**
-   * Number keys select an option. Selection only — locking in stays a
-   * deliberate second act, so a stray keypress can never answer a question.
-   */
-  useEffect(() => {
-    if (!question || outcome) return
-    const options = question.options
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.metaKey || event.ctrlKey || event.altKey) return
-      const target = event.target
-      if (target instanceof Element && target.closest('input, textarea, select')) return
-      const slot = Number(event.key)
-      if (!Number.isInteger(slot) || slot < 1 || slot > options.length) return
-      event.preventDefault()
-      setSelectedId(options[slot - 1].id)
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [question, outcome])
-
   // A game with no prediction scenes is possible (the schema allows a game of
   // dialogue). Saying so beats an empty quiz that looks broken.
   if (total === 0) {
     return (
-      <div>
+      <VisualNovelShell kind="quiz" title={gauntlet.title} xp={xp} speaker={{ actor: 'rival' }} onClose={onClose}>
         <p className="leading-7 text-ink-muted">
           No questions were made for this world, so there is nothing to answer here yet. Regenerate the world to get a
           new set.
@@ -236,7 +258,7 @@ export function QuizPanel({
         <button className="button-primary mt-6" onClick={onClose}>
           Back to the hub
         </button>
-      </div>
+      </VisualNovelShell>
     )
   }
 
@@ -244,13 +266,42 @@ export function QuizPanel({
   const advanceLabel = isLast ? 'See your score' : 'Next question'
   const advance = () => goTo(index + 1)
 
+  const choices: VnChoice[] = question
+    ? question.options.map((option) => ({ id: option.id, text: option.text, tone: toneOf(option, outcome) }))
+    : []
+
+  /**
+   * The scene's own props, and nothing else. Undefined rather than an empty
+   * array when the scene declared none: `SceneIllustration` renders null either
+   * way, but the shell would still open a band for the element that returned it.
+   */
+  const illustration =
+    question && question.props && question.props.length > 0 ? (
+      <SceneIllustration props={question.props} />
+    ) : undefined
+
   return (
-    <div>
+    <VisualNovelShell
+      kind="quiz"
+      title={gauntlet.title}
+      subtitle={question ? `Question ${index + 1} of ${total}` : 'Your score'}
+      progress={{ done: answeredCount, total, label: 'answered' }}
+      xp={xp}
+      illustration={illustration}
+      speaker={{ actor: 'rival' }}
+      // The question is what the rival says. On the score card there is nothing
+      // left to ask, so the band closes rather than repeating the last prompt.
+      dialogue={question?.prompt}
+      footerHint={
+        question && !outcome
+          ? `Keys 1–${question.options.length} pick an option, in the order shown. Picking one does not answer it — you still have to lock it in.`
+          : undefined
+      }
+      onClose={onClose}
+      closeLabel="Back to the hub"
+    >
       {/* Where you are, what you have, and a way back to any question. */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-white/10 pb-5">
-        <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-ink-muted">
-          {question ? `Question ${index + 1} of ${total}` : 'Your score'}
-        </p>
         <div className="flex flex-wrap items-center gap-1.5">
           {graded.map((entry, slot) => {
             const current = slot === index
@@ -284,7 +335,7 @@ export function QuizPanel({
 
       <div className="mt-6">
         {question === null ? (
-          <div className="stage-enter">
+          <div>
             <p className="eyebrow">Round finished</p>
             <h3 className="mt-3 text-3xl font-black text-ink sm:text-4xl">
               {rightCount} <span className="text-ink-muted">/ {total}</span>
@@ -334,47 +385,62 @@ export function QuizPanel({
               </button>
             </div>
           </div>
-        ) : outcome ? (
-          /* One screen: the question with the answers marked, then how it went,
-             what was wrong with it, and the quote from the learner's own notes.
-             One button out. */
-          <div key={question.id} className="stage-enter">
-            <PredictionStage
-              scene={question}
-              outcome={outcome}
-              selectedId={selectedId}
-              committing={committing}
-              onSelect={setSelectedId}
-              onCommit={onCommit}
-            />
-            <div ref={resultRef} className="mt-7 scroll-mt-2 border-t border-white/10 pt-7">
-              <DiagnosisStage
-                diagnosis={outcome.diagnosis}
-                evidence={sourceOf(outcome)}
-                onContinue={advance}
-                continueLabel={advanceLabel}
-              />
-            </div>
-          </div>
         ) : (
+          /* One screen: the answers, marked once the answer is out, then how it
+             went, what was wrong with it, the quote from the learner's own notes
+             and how the rest of the class went. One button out. */
           <div key={question.id}>
-            <PredictionStage
-              scene={question}
-              outcome={null}
-              selectedId={selectedId}
-              committing={committing}
-              onSelect={setSelectedId}
-              onCommit={commit}
+            {!outcome && (
+              <p className="mb-4 text-sm leading-6 text-ink-muted">
+                Answer first, then see the explanation. Pick the one you think is right — getting it wrong is useful
+                too.
+              </p>
+            )}
+
+            <VnChoiceRow
+              kind="quiz"
+              choices={choices}
+              selectedId={outcome?.optionId ?? selectedId}
+              onSelect={select}
+              locked={outcome !== null}
+              numberKeys={outcome === null}
             />
-            <p className="mt-5 text-xs font-semibold text-ink-muted">
-              Keys <kbd className="font-mono text-ink">1</kbd>–
-              <kbd className="font-mono text-ink">{question.options.length}</kbd> pick an option, in the order shown.
-              Picking one does not answer it — you still have to lock it in.
-            </p>
+
+            {outcome ? (
+              <>
+                <div className="mt-6 flex flex-wrap items-center gap-4 empty:mt-0" aria-live="polite">
+                  <RewardNote outcome={outcome} />
+                </div>
+                <div ref={resultRef} className="mt-7 scroll-mt-2 border-t border-white/10 pt-7">
+                  <DiagnosisStage
+                    diagnosis={outcome.diagnosis}
+                    evidence={sourceOf(outcome)}
+                    onContinue={advance}
+                    continueLabel={advanceLabel}
+                  >
+                    {/* The committed option, never the selected one: that is the
+                        guard that keeps the class's answers off the screen until
+                        the learner has owned theirs. */}
+                    <CohortEcho
+                      sceneId={question.id}
+                      cohort={cohort}
+                      chosenOptionId={outcome.optionId}
+                      graph={graph}
+                    />
+                  </DiagnosisStage>
+                </div>
+              </>
+            ) : (
+              <div className="mt-7 flex flex-wrap items-center gap-4" aria-live="polite">
+                <button className="button-primary" disabled={!selectedId || committing} onClick={commit}>
+                  {committing ? 'Locking in…' : 'Lock in answer'}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
-    </div>
+    </VisualNovelShell>
   )
 }
 
