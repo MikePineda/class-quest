@@ -7,7 +7,7 @@ export function Brand({ compact = false, subtitle = 'Learn by playing' }: BrandP
   return (
     <div className="brand-lockup flex items-center gap-3">
       <img
-        className={compact ? 'h-11 w-auto' : 'h-14 w-auto sm:h-16'}
+        className={compact ? 'h-11 w-auto' : 'h-32 w-auto sm:h-40'}
         src="/brand/classquest-logo.png"
         alt="ClassQuest"
       />
