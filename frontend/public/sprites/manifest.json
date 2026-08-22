@@ -1,0 +1,148 @@
+{
+  "actors/explorer_idle.png": {
+    "frame": 32,
+    "frames": 4,
+    "from": "Entities/Npc's/Rogue/Idle",
+    "h": 32,
+    "w": 128
+  },
+  "actors/explorer_run.png": {
+    "frame": 64,
+    "frames": 6,
+    "from": "Entities/Npc's/Rogue/Run",
+    "h": 64,
+    "w": 384
+  },
+  "actors/mentor_owl_idle.png": {
+    "frame": 32,
+    "frames": 1,
+    "from": "drawn in scripts/slice_sprites.py",
+    "h": 32,
+    "w": 32
+  },
+  "actors/rival_idle.png": {
+    "frame": 32,
+    "frames": 4,
+    "from": "Entities/Npc's/Knight/Idle",
+    "h": 32,
+    "w": 128
+  },
+  "actors/rival_run.png": {
+    "frame": 64,
+    "frames": 6,
+    "from": "Entities/Npc's/Knight/Run",
+    "h": 64,
+    "w": 384
+  },
+  "actors/villager_idle.png": {
+    "frame": 32,
+    "frames": 4,
+    "from": "Entities/Npc's/Wizzard/Idle",
+    "h": 32,
+    "w": 128
+  },
+  "actors/villager_run.png": {
+    "frame": 64,
+    "frames": 6,
+    "from": "Entities/Npc's/Wizzard/Run",
+    "h": 64,
+    "w": 384
+  },
+  "decor/banner.png": {
+    "from": "Environment/Props/Static/Dungeon_Props.png@64,64",
+    "h": 32,
+    "w": 16
+  },
+  "decor/bookshelf.png": {
+    "from": "Environment/Tilesets/Dungeon_Tiles.png@128,64",
+    "h": 32,
+    "w": 16
+  },
+  "decor/rock.png": {
+    "from": "Environment/Props/Static/Rocks.png@64,16",
+    "h": 16,
+    "w": 16
+  },
+  "props/chest.png": {
+    "from": "Environment/Props/Static/Furniture.png@48,16",
+    "h": 32,
+    "w": 32
+  },
+  "props/crystal_cluster.png": {
+    "from": "Environment/Props/Static/Resources.png@80,16",
+    "h": 16,
+    "w": 16
+  },
+  "props/doorway_pair.png": {
+    "from": "Environment/Props/Static/Dungeon_Props.png@112,0",
+    "h": 32,
+    "w": 32
+  },
+  "props/lantern.png": {
+    "from": "Environment/Props/Static/Dungeon_Props.png@64,32",
+    "h": 32,
+    "w": 16
+  },
+  "props/signpost.png": {
+    "frame": 32,
+    "frames": 1,
+    "from": "drawn in scripts/slice_sprites.py",
+    "h": 32,
+    "w": 32
+  },
+  "tiles/floor_brick.png": {
+    "from": "Environment/Tilesets/Floors_Tiles.png@256,32",
+    "h": 16,
+    "w": 16
+  },
+  "tiles/floor_dirt.png": {
+    "from": "Environment/Tilesets/Floors_Tiles.png@192,160",
+    "h": 16,
+    "w": 16
+  },
+  "tiles/floor_grass.png": {
+    "from": "Environment/Tilesets/Floors_Tiles.png@32,160",
+    "h": 16,
+    "w": 16
+  },
+  "tiles/floor_sand.png": {
+    "from": "Environment/Tilesets/Floors_Tiles.png@112,160",
+    "h": 16,
+    "w": 16
+  },
+  "tiles/wall_brown_face.png": {
+    "from": "Environment/Tilesets/Wall_Tiles.png@224,96",
+    "h": 16,
+    "w": 16
+  },
+  "tiles/wall_brown_top.png": {
+    "from": "Environment/Tilesets/Wall_Tiles.png@224,48",
+    "h": 16,
+    "w": 16
+  },
+  "tiles/wall_stone_face.png": {
+    "from": "Environment/Tilesets/Wall_Tiles.png@128,96",
+    "h": 16,
+    "w": 16
+  },
+  "tiles/wall_stone_top.png": {
+    "from": "Environment/Tilesets/Wall_Tiles.png@128,48",
+    "h": 16,
+    "w": 16
+  },
+  "tiles/wall_tan_face.png": {
+    "from": "Environment/Tilesets/Wall_Tiles.png@32,96",
+    "h": 16,
+    "w": 16
+  },
+  "tiles/wall_tan_top.png": {
+    "from": "Environment/Tilesets/Wall_Tiles.png@32,48",
+    "h": 16,
+    "w": 16
+  },
+  "tiles/water.png": {
+    "from": "Environment/Tilesets/Water_tiles.png@32,192",
+    "h": 16,
+    "w": 16
+  }
+}
