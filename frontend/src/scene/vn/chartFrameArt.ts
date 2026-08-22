@@ -72,10 +72,14 @@ export function chartCurvePoints(series: ChartSeries, x = 0, y = 0): ChartPoint[
   for (let i = 0; i <= SAMPLES; i += 1) {
     const t = i / SAMPLES
     const px = x + 5 + t * (w - 9)
+    // Canvas y grows downward, so a falling loss is a *rising* y. Both curves
+    // are written as `1 - <height above the axis>` for that reason: get the
+    // sign wrong and the picture claims loss climbs with training, which is
+    // the one thing this chart exists to deny.
     const py =
       series === 'training'
-        ? y + 6 + (1 - t) ** 1.6 * (h - 12)
-        : y + 6 + (h - 12) * (0.15 + 3.4 * (t - 0.42) ** 2)
+        ? y + 6 + (h - 12) * (1 - (1 - t) ** 1.6)
+        : y + 6 + (h - 12) * (1 - (0.06 + 2.2 * (t - 0.42) ** 2))
     points.push({ x: px, y: py })
   }
   return points
