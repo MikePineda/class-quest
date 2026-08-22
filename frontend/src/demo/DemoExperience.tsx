@@ -4,6 +4,7 @@ import { fixtureGraph, fixtureQuest } from '../fixtures'
 import { AnswerChoices } from './AnswerChoices'
 import { ConceptTrail } from './ConceptTrail'
 import { findMisconception, resolveDemoEncounter } from './demoData'
+import { Brand } from '../foundation/Brand'
 
 type DemoPhase = 'intro' | 'prediction' | 'diagnosis' | 'source' | 'transfer' | 'result'
 
@@ -81,10 +82,10 @@ const phaseMeta: Record<DemoPhase, { step: string; label: string }> = {
 }
 
 const primaryButton =
-  'inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-5 py-3 text-sm font-extrabold text-background shadow-lg shadow-primary/15 transition hover:bg-primary-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-soft focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-40'
+  'button-primary'
 
 const secondaryButton =
-  'inline-flex min-h-11 items-center justify-center rounded-xl border border-white/15 bg-surface-high px-5 py-3 text-sm font-bold text-ink transition hover:border-white/30 hover:bg-surface-highest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-offset-2 focus-visible:ring-offset-background'
+  'button-secondary'
 
 function selectedOption(options: Option[], id: string | null) {
   return options.find((option) => option.id === id)
@@ -128,15 +129,9 @@ export function DemoExperience() {
 
   return (
     <div className="min-h-screen overflow-hidden bg-quest-grid">
-      <header className="border-b border-white/10 bg-background/75 backdrop-blur-xl">
+      <header className="border-b border-white/10 bg-background-raised/90 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary font-black text-background shadow-lg shadow-primary/20" aria-hidden="true">CQ</div>
-            <div>
-              <p className="font-black tracking-tight text-ink">ClassQuest</p>
-              <p className="text-xs text-ink-muted">Learn by finding the wrong turn</p>
-            </div>
-          </div>
+          <Brand compact subtitle="Wrong-Turn Quest" />
           <div className="flex items-center gap-3">
             <span className="hidden items-center gap-2 rounded-full border border-secondary/25 bg-secondary/10 px-3 py-1.5 text-xs font-bold text-secondary sm:inline-flex">
               <span className="h-2 w-2 rounded-full bg-secondary" aria-hidden="true" /> Offline demo
@@ -154,21 +149,21 @@ export function DemoExperience() {
         <div className="mb-7 flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-extrabold uppercase tracking-[0.16em] text-primary-soft">Wrong-Turn Quest</span>
-              <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">{encounter.chapter.title}</span>
+              <span className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 font-hud text-[9px] tracking-[0.1em] text-primary">WRONG-TURN QUEST</span>
+              <span className="font-hud text-[9px] tracking-[0.1em] text-ink-muted">{encounter.chapter.title}</span>
             </div>
             <h1 className="mt-4 text-3xl font-black tracking-tight text-ink sm:text-4xl lg:text-5xl">Misconception Detective</h1>
             <p className="mt-3 max-w-2xl text-base leading-7 text-ink-muted sm:text-lg">Make a prediction, inspect the evidence, then prove the concept transfers.</p>
           </div>
           <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-surface/70 px-4 py-3">
-            <span className="font-mono text-lg font-black text-primary">{phaseMeta[state.phase].step}</span>
+            <span className="font-hud text-sm text-primary">{phaseMeta[state.phase].step}</span>
             <span className="h-6 w-px bg-white/15" aria-hidden="true" />
             <span className="text-sm font-bold text-ink">{phaseMeta[state.phase].label}</span>
           </div>
         </div>
 
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
-          <section className="quest-panel min-h-[34rem] rounded-2xl border border-white/10 bg-surface/85 p-5 shadow-2xl shadow-black/30 backdrop-blur sm:p-8 lg:p-10">
+          <section className="cq-panel quest-panel min-h-[34rem] bg-surface/90 p-5 backdrop-blur sm:p-8 lg:p-10">
             <div key={state.phase} className="stage-enter">
               {state.phase === 'intro' && (
                 <IntroStage title={fixtureQuest.title} conceptLabel={encounter.concept.label} summary={encounter.concept.summary} lines={encounter.intro?.lines ?? []} onStart={() => dispatch({ type: 'START' })} />
@@ -210,12 +205,8 @@ function IntroStage({ title, conceptLabel, summary, lines, onStart }: { title: s
           <span className="text-sm text-ink-muted">About 60 seconds · No login required</span>
         </div>
       </div>
-      <div className="mx-auto grid h-48 w-48 place-items-center rounded-full border border-secondary/25 bg-secondary/5 shadow-[0_0_80px_rgba(79,219,200,0.12)]" aria-hidden="true">
-        <div className="relative h-28 w-28">
-          <div className="absolute left-2 top-3 h-20 w-20 rounded-full border-2 border-primary/70" />
-          <div className="absolute bottom-1 right-1 h-20 w-20 rounded-full border-2 border-secondary/80" />
-          <div className="absolute left-11 top-12 h-8 w-8 rotate-45 border border-white/30 bg-surface-highest" />
-        </div>
+      <div className="mx-auto grid h-48 w-48 place-items-center rounded-full border border-secondary/25 bg-secondary/5 shadow-[0_0_80px_rgba(67,217,196,0.12)]" aria-hidden="true">
+        <img className="pixel-art h-32 w-32 object-contain" src="/brand/sprites/mentor-owl.png" alt="" />
       </div>
     </div>
   )
