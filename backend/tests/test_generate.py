@@ -389,7 +389,7 @@ def test_gen_gauntlet_falls_back_to_derive_when_model_is_unusable(monkeypatch, d
     assert g["graph_id"] == demo.graph["graph_id"]
     assert validators.validate_game(g, demo.graph) == []
     ids_in = [s["id"] for ch in g["chapters"] for s in ch["scenes"]]
-    assert ids_in == ["g_sc_pred_training", "g_sc_pred_overfit"]
+    assert ids_in == ["g_sc_pred_training", "g_sc_pred_overfit", "g_sc_transfer_overfit"]
     assert warnings and "derive" in warnings[0].lower() or "fallback" in warnings[0].lower()
 
 
