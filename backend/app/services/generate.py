@@ -175,12 +175,25 @@ def _fix_plan(raw, n: int, max_worlds: int) -> list[dict]:
     return result
 
 
+SEGMENTS_PER_WORLD = 6
+
+
+def _effective_max_worlds(n: int, max_worlds: int) -> int:
+    """How many worlds this much content actually deserves.
+
+    Roughly one world per six segments, never more than the configured
+    ceiling and never fewer than one. Splitting a short upload into the
+    maximum number of worlds costs three LLM calls each and leaves every
+    world too thin to carry a story.
+    """
+    return max(1, min(max_worlds, math.ceil(n / SEGMENTS_PER_WORLD)))
+
+
 def _even_chunks(n: int, max_worlds: int, server_name: str) -> list[dict]:
-    """Deterministic fallback plan: as-even-as-possible contiguous chunks,
-    roughly one world per 6 segments."""
+    """Deterministic fallback plan: as-even-as-possible contiguous chunks."""
     if n <= 0:
         return []
-    k = max(1, min(max_worlds, math.ceil(n / 6)))
+    k = _effective_max_worlds(n, max_worlds)
     base, rem = divmod(n, k)
     worlds = []
     start = 0
@@ -202,8 +215,9 @@ def plan_worlds(server_name: str, description: str | None, segments: list[str],
     """Ask the model to split `segments` into worlds; repair or fall back to
     an even split. Never raises."""
     n = len(segments)
+    target = _effective_max_worlds(n, max_worlds)
     try:
-        system, user = prompts.planner_prompt(server_name, description, segments, max_worlds)
+        system, user = prompts.planner_prompt(server_name, description, segments, target)
         raw = llm.call_json(system, user, max_tokens=2000, temperature=0.3)
     except llm.FixtureMode:
         demo = fixtures.load_demo()
@@ -213,7 +227,7 @@ def plan_worlds(server_name: str, description: str | None, segments: list[str],
     except Exception:  # noqa: BLE001 - plan_worlds must never raise
         return _even_chunks(n, max_worlds, server_name)
 
-    plan = _fix_plan(raw, n, max_worlds)
+    plan = _fix_plan(raw, n, target)
     return plan if plan else _even_chunks(n, max_worlds, server_name)
 
 
