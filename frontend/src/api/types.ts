@@ -126,7 +126,6 @@ export interface User {
   role: Role | null
   industry: string | null
   about: string | null
-  pet?: string | null
   created_at: string
 }
 
@@ -154,7 +153,6 @@ export interface ProfileUpdateIn {
   role?: Role
   industry?: string
   about?: string
-  pet?: string
 }
 
 export interface ServerSummary {
@@ -234,7 +232,6 @@ export interface LeaderboardEntry {
   rank: number
   user_id: string
   display_name: string
-  pet: string | null
   xp: number
   attempts: number
 }
