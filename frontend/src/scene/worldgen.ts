@@ -223,6 +223,9 @@ export function buildWorld(game: Game): WorldMap {
     rooms,
     nodes,
     decor,
+    // A chapter map has no portals. The field exists so both generators satisfy
+    // one WorldMap shape; the hub is built by `hubgen.ts`.
+    portals: [],
     spawn,
   }
 }
