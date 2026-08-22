@@ -1,0 +1,79 @@
+{
+  "schema_version": "1.0",
+  "game_id": "q7kp2wm4",
+  "graph_id": "wk3ml0a1",
+  "archetype": "quest",
+  "title": "The Archivist's Cavern",
+  "chapters": [
+    {
+      "id": "ch_foundations",
+      "title": "What the Machine Remembers",
+      "concept_ids": ["training_data", "generalisation"],
+      "background": "cavern",
+      "scenes": [
+        {
+          "type": "dialogue",
+          "id": "sc_open",
+          "speaker": "mentor_owl",
+          "props": ["lantern"],
+          "lines": [
+            "Down here we keep the machines that learned. Some of them learned well.",
+            "Most of them only memorised, and could not tell the difference."
+          ]
+        },
+        {
+          "type": "prediction",
+          "id": "sc_pred_training",
+          "concept_id": "training_data",
+          "props": ["chart_frame"],
+          "prompt": "This machine answered every question in its own study book correctly. What does that tell you about it?",
+          "options": [
+            { "id": "op_learned", "text": "It understood the material", "correct": false, "misconception_id": "training_is_performance" },
+            { "id": "op_memorised", "text": "It can recall the book, nothing more yet", "correct": true },
+            { "id": "op_broken", "text": "Something is wrong with it", "correct": false, "misconception_id": "training_is_performance" }
+          ],
+          "reveal": "Recalling the study book is the least it could do. The book is what it was shown. Whether it understood anything is a question the book cannot answer, which is why we keep a second one hidden."
+        }
+      ]
+    },
+    {
+      "id": "ch_overfitting",
+      "title": "Overfitting",
+      "concept_ids": ["overfitting"],
+      "background": "cavern",
+      "scenes": [
+        {
+          "type": "dialogue",
+          "id": "sc_doors",
+          "speaker": "mentor_owl",
+          "props": ["doorway_pair", "chart_frame"],
+          "lines": [
+            "This model scored 99 percent on the data it studied.",
+            "Before we walk through, tell me what happens when it meets data it has never seen."
+          ]
+        },
+        {
+          "type": "prediction",
+          "id": "sc_pred_overfit",
+          "concept_id": "overfitting",
+          "props": ["doorway_pair", "chart_frame"],
+          "prompt": "99 percent on training data. What does it score on new data?",
+          "options": [
+            { "id": "op_same", "text": "It scores about 99 percent again", "correct": false, "misconception_id": "high_train_high_test" },
+            { "id": "op_worse", "text": "It scores far worse", "correct": true },
+            { "id": "op_refuse", "text": "It refuses to answer", "correct": false, "misconception_id": "overfitting_is_bad_data" }
+          ],
+          "reveal": "Far worse, and the training score gave no warning. It kept climbing while performance on unseen data fell, because the model was fitting the noise in its own study book. That widening gap is the signature of overfitting."
+        },
+        {
+          "type": "simulation",
+          "id": "sc_sim_curve",
+          "concept_id": "overfitting",
+          "widget": "curve_fit",
+          "instruction": "Raise the curve's flexibility until it passes through every point. Watch what happens to the dotted line, which is the data it has not seen.",
+          "success_condition": "Learner observes validation error rising while training error falls."
+        }
+      ]
+    }
+  ]
+}
