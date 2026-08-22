@@ -1,0 +1,44 @@
+# AI code review on pull requests via MiniMax (tarmojussila/minimax-code-review).
+#
+# Gated two ways so strangers cannot spend our API budget:
+#   1. The job only runs when the PR author is OWNER / MEMBER / COLLABORATOR.
+#   2. pull_request runs from forks never receive repository secrets anyway.
+#
+# Setup (repo Settings -> Secrets and variables -> Actions):
+#   Secret   MINIMAX_API_KEY   required. A secret, not a variable: variables are plaintext.
+#   Variable MINIMAX_MODEL     optional, defaults to MiniMax-M2.5 below.
+name: code-review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths-ignore:
+      - "docs/**"
+      - "**.md"
+      - "fixtures/**"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: code-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: MiniMax review
+    runs-on: ubuntu-latest
+    if: contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association)
+    steps:
+      - uses: actions/checkout@v4
+      - name: Review
+        uses: tarmojussila/minimax-code-review@v0.4.0
+        with:
+          MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+          MINIMAX_MODEL: ${{ vars.MINIMAX_MODEL || 'MiniMax-M2.5' }}
+          MINIMAX_REVIEWER_NAME: ClassQuest Reviewer
+          # Generated / vendored files add tokens and no signal.
+          EXCLUDE_PATTERNS: "*.lock,package-lock.json,frontend/src/api/types.gen.ts,frontend/src/fixtures/*,*.svg,*.png"
+          # Cost guard: a huge diff gets truncated rather than billed in full.
+          MAX_DIFF_CHARS: "60000"
