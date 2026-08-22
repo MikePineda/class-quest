@@ -89,6 +89,14 @@ const inRect = (r: Rect, t: Point): boolean =>
 const HUB_BACKGROUND = 'cavern' as const
 
 /**
+ * Where "leave" goes: the picker, which is the screen this world was chosen
+ * from and the one that lists every other world. Navigation in this app is a
+ * plain full page load — there is no router — so this is an `href`, and the
+ * keyboard path below sets `window.location` rather than pushing history.
+ */
+const LEAVE_HREF = '/world'
+
+/**
  * Everything the learner accumulates inside one world, carried in a single
  * value keyed by the world it belongs to. Switching worlds then resets it
  * during render, the way `fetched` already does, instead of through an effect
@@ -573,10 +581,27 @@ export function WorldExperience({ worldId }: WorldExperienceProps) {
     setOpenPortal(null)
   }, [])
 
+  /**
+   * Leaving says nothing about what was achieved, on purpose: the browser only
+   * knows which portals were walked, and XP is the server's word. So this is a
+   * door, not a summary.
+   */
+  const leave = useCallback(() => {
+    window.location.href = LEAVE_HREF
+  }, [])
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      // Escape steps back one level: out of an open portal if there is one,
+      // otherwise out of the world entirely. Closing keeps its old behaviour,
+      // so a learner mid-question never loses the map under them.
       if (event.key === 'Escape') {
-        close()
+        if (openPortal !== null) {
+          close()
+          return
+        }
+        event.preventDefault()
+        leave()
         return
       }
       if (openPortal !== null) return
@@ -595,7 +620,7 @@ export function WorldExperience({ worldId }: WorldExperienceProps) {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [portalHere, openPortal, close])
+  }, [portalHere, openPortal, close, leave])
 
   // Move focus into the overlay so the keyboard follows the eye.
   useEffect(() => {
@@ -680,7 +705,7 @@ export function WorldExperience({ worldId }: WorldExperienceProps) {
       {/* HUD */}
       <div className="pointer-events-none absolute inset-0 flex items-start justify-between gap-4 p-4 sm:p-6">
         <div className="pointer-events-auto rounded-2xl border border-white/10 bg-background/75 px-4 py-3 shadow-2xl shadow-black/40 backdrop-blur">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary font-black text-background" aria-hidden="true">
               CQ
             </span>
@@ -697,6 +722,19 @@ export function WorldExperience({ worldId }: WorldExperienceProps) {
                 {xp} XP
               </span>
             )}
+            {/* The way out, and the only one there was: a first-time viewer has
+                to see it without hunting, so it sits in the card everyone is
+                already reading and carries its own keyboard hint. */}
+            <a
+              className="ml-auto flex items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-xs font-black text-ink-muted transition hover:border-white/40 hover:bg-white/10 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              href={LEAVE_HREF}
+            >
+              <span aria-hidden="true">←</span>
+              Leave world
+              <kbd className="hidden rounded border border-white/15 bg-background/70 px-1.5 py-0.5 font-mono text-[10px] font-bold text-ink-muted sm:inline">
+                Esc
+              </kbd>
+            </a>
           </div>
           <div className="mt-3 flex items-center gap-3">
             {/* One pip per gate, in its own colour, so the three modes are
@@ -751,7 +789,10 @@ export function WorldExperience({ worldId }: WorldExperienceProps) {
             </p>
             <p className="mt-1">
               <kbd className="font-mono text-ink">E</kbd> to enter a portal ·{' '}
-              <kbd className="font-mono text-ink">Esc</kbd> to close
+              <kbd className="font-mono text-ink">Esc</kbd> to close it
+            </p>
+            <p className="mt-1">
+              <kbd className="font-mono text-ink">Esc</kbd> out on the map to leave the world
             </p>
           </div>
           {trail.length > 0 && (
