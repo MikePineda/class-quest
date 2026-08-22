@@ -644,3 +644,19 @@ class TestEffectiveMaxWorlds:
         monkeypatch.setattr(generate.llm, "call_json", lambda *a, **k: {"worlds": []})
         generate.plan_worlds("Course", None, segments, 6)
         assert seen["max_worlds"] == 3
+
+
+def test_failed_world_error_names_the_stage(monkeypatch, demo):
+    """A world's error reaches the user through the API, so it has to say which
+    stage died. A bare exception string means an SSH session to find out."""
+    def boom(graph, title, blurb):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(generate, "gen_quest", boom)
+    server_id = _seed_server(demo.segments)
+    generate.run_pipeline(server_id)
+
+    with SessionLocal() as db:
+        w = db.execute(select(World).where(World.server_id == server_id)).scalars().one()
+        assert w.error.startswith("quest: "), w.error
+        assert "boom" in w.error
