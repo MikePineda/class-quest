@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { FLOOR, VOID, WALL, tileAt } from './types'
 import type { Point, PortalKind, Rect, WorldMap } from './types'
-import { buildHub, pathLine } from './hubgen'
+import { buildHub, guideTileFor, pathLine } from './hubgen'
 import type { HubInput, HubPortalSpec } from './hubgen'
 
 const SPECS: HubPortalSpec[] = [
@@ -56,12 +56,14 @@ function flood(map: WorldMap, from: Point): Set<string> {
 describe('buildHub', () => {
   const map = buildHub(input())
 
-  it('is 34 x 22 tiles, holding only void, wall and floor', () => {
-    // 30x18 interior plus a 2-tile margin. Verified against WorldCanvas.pickScale:
-    // it covers 1280/1920/2560-wide viewports without letterboxing. Shrinking
-    // below ~28x16 reintroduces the letterbox.
-    expect(map.width).toBe(34)
-    expect(map.height).toBe(22)
+  it('is 28 x 18 tiles, holding only void, wall and floor', () => {
+    // 24x14 interior plus a 2-tile margin. Deliberately tight: the hub read as
+    // empty at 30x18. Verified against WorldCanvas.pickScale, which takes the
+    // larger of the preferred and the covering scale: 1280x720 -> 3 (1344x864),
+    // 1920x1080 -> 5 (2240x1440), 2560x1440 -> 6 (2688x1728). All cover.
+    // Shrinking below ~24x14 reintroduces the letterbox at 1440p.
+    expect(map.width).toBe(28)
+    expect(map.height).toBe(18)
     expect(map.tiles).toHaveLength(map.width * map.height)
     for (const tile of map.tiles) expect([VOID, FLOOR, WALL]).toContain(tile)
   })
@@ -86,12 +88,12 @@ describe('buildHub', () => {
     // tile resolves to index 0, so floor, walls and tint all draw. Carve a
     // second room and every tile outside both rects renders black.
     expect(map.rooms).toHaveLength(1)
-    expect(map.rooms[0]).toMatchObject({ x: 2, y: 2, w: 30, h: 18, background: 'cavern' })
+    expect(map.rooms[0]).toMatchObject({ x: 2, y: 2, w: 24, h: 14, background: 'cavern' })
     expect(map.nodes).toEqual([])
   })
 
   it('spawns dead centre on a floor tile inside the interior', () => {
-    expect(map.spawn).toEqual({ x: 17, y: 11 })
+    expect(map.spawn).toEqual({ x: 14, y: 9 })
     expect(tileAt(map, map.spawn.x, map.spawn.y)).toBe(FLOOR)
     const room = map.rooms[0]
     expect(map.spawn.x).toBeGreaterThanOrEqual(room.x)
@@ -105,14 +107,27 @@ describe('buildHub', () => {
     expect(map.portals.map((p) => p.kind)).toEqual(['storybook', 'quiz', 'explain', 'sealed'])
     expect(new Set(map.portals.map((p) => p.kind)).size).toBe(4)
     expect(map.portals.map((p) => p.at)).toEqual([
-      { x: 7, y: 7 },
-      { x: 17, y: 5 },
-      { x: 27, y: 7 },
-      { x: 17, y: 17 },
+      { x: 6, y: 6 },
+      { x: 14, y: 4 },
+      { x: 22, y: 6 },
+      { x: 14, y: 13 },
     ])
     expect(map.portals.map((p) => p.label)).toEqual(SPECS.map((s) => s.label))
     expect(map.portals.map((p) => p.blurb)).toEqual(SPECS.map((s) => s.blurb))
     expect(map.portals.map((p) => p.locked)).toEqual([false, false, false, true])
+  })
+
+  it('keeps every anchor at least two tiles inside the interior', () => {
+    // The arch art is 48px tall and is drawn upward from the anchor's foot, so
+    // an anchor hard against a wall clips. Two tiles of slack in every
+    // direction is what buys the overhang.
+    const room = map.rooms[0]
+    for (const portal of map.portals) {
+      expect(portal.at.x).toBeGreaterThanOrEqual(room.x + 2)
+      expect(portal.at.x).toBeLessThanOrEqual(room.x + room.w - 3)
+      expect(portal.at.y).toBeGreaterThanOrEqual(room.y + 2)
+      expect(portal.at.y).toBeLessThanOrEqual(room.y + room.h - 3)
+    }
   })
 
   it('gives every portal a 3x2 hotspot anchored one tile to its left', () => {
@@ -172,6 +187,52 @@ describe('buildHub', () => {
     expect(new Set(map.decor.map((d) => key(d.at))).size).toBe(map.decor.length)
   })
 
+  it('stands a guide beside the three gates that have something to say', () => {
+    // Sealed has nobody: there is nothing behind it to hint at yet.
+    expect(map.portals.map((p) => p.guide)).toEqual([
+      'villager',
+      'rival',
+      'mentor_owl',
+      undefined,
+    ])
+  })
+
+  it('places every guide on reachable floor, outside every hotspot', () => {
+    // A guide is decoration: it must never sit where the player stands to open
+    // a gate, and it must never be somewhere the player cannot walk.
+    const reachable = flood(map, map.spawn)
+    const hotspots = new Set<string>()
+    for (const portal of map.portals) {
+      for (const tile of rectTiles(portal.hotspot)) hotspots.add(key(tile))
+    }
+    const guides = map.portals.filter((p) => p.guide)
+    expect(guides).toHaveLength(3)
+    for (const portal of guides) {
+      const tile = guideTileFor(portal)
+      expect(tileAt(map, tile.x, tile.y)).toBe(FLOOR)
+      expect(reachable.has(key(tile))).toBe(true)
+      expect(hotspots.has(key(tile))).toBe(false)
+      expect(key(tile)).not.toBe(key(map.spawn))
+    }
+  })
+
+  it('keeps guides off the radiating paths and gives each its own tile', () => {
+    const onPath = new Set<string>()
+    for (const portal of map.portals) {
+      for (const tile of pathLine(map.spawn, portal.at)) onPath.add(key(tile))
+    }
+    const tiles = map.portals.filter((p) => p.guide).map((p) => key(guideTileFor(p)))
+    for (const tile of tiles) expect(onPath.has(tile)).toBe(false)
+    expect(new Set(tiles).size).toBe(tiles.length)
+  })
+
+  it('never scatters decor onto a guide tile', () => {
+    const guides = new Set(
+      map.portals.filter((p) => p.guide).map((p) => key(guideTileFor(p))),
+    )
+    for (const placement of map.decor) expect(guides.has(key(placement.at))).toBe(false)
+  })
+
   it('mirrors the seed and title it was built from', () => {
     expect(map.gameId).toBe('world0001')
     expect(map.title).toBe('Overfitting and Generalisation')
@@ -182,6 +243,7 @@ describe('buildHub', () => {
     expect(Array.from(again.tiles)).toEqual(Array.from(map.tiles))
     expect(again.portals).toEqual(map.portals)
     expect(again.decor).toEqual(map.decor)
+    expect(again.portals.map((p) => p.guide)).toEqual(map.portals.map((p) => p.guide))
     expect(again.spawn).toEqual(map.spawn)
     expect(again.rooms).toEqual(map.rooms)
   })
@@ -229,9 +291,9 @@ describe('buildHub with an incomplete portal list', () => {
 
 describe('pathLine', () => {
   it('starts at the source, ends at the target and never skips a tile', () => {
-    const line = pathLine({ x: 17, y: 11 }, { x: 7, y: 7 })
-    expect(line[0]).toEqual({ x: 17, y: 11 })
-    expect(line[line.length - 1]).toEqual({ x: 7, y: 7 })
+    const line = pathLine({ x: 14, y: 9 }, { x: 6, y: 6 })
+    expect(line[0]).toEqual({ x: 14, y: 9 })
+    expect(line[line.length - 1]).toEqual({ x: 6, y: 6 })
     for (let i = 1; i < line.length; i++) {
       const dx = Math.abs(line[i].x - line[i - 1].x)
       const dy = Math.abs(line[i].y - line[i - 1].y)

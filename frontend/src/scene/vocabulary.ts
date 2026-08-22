@@ -148,23 +148,32 @@ export function propArt(p: Prop): PropArt {
 // The sprite pack contains nothing emissive and no coloured variants, so there
 // is nothing to cut for a glow — and code-drawn light gives colour and
 // animation as parameters. `chart_frame` already set this precedent.
+//
+// The frame is `portal_arch.png`, a tall stone archway whose interior is a
+// solid black hole. That hollow is the point: it is the canvas the vortex is
+// painted onto, so the stone reads as masonry around a gap rather than as a
+// door. `doorway_pair.png` — literally two closed wooden leaves — read as a
+// door no matter how much light was poured through it, which is why it is gone.
 
 export interface PortalArt {
-  /** Real pixel art under the glow: the stone arch. */
+  /** Real pixel art under the glow: the stone arch, hollow in the middle. */
   frame: Still
   /** Flanking light source, or null for a portal that gives off none. */
   lantern: Still | null
-  /** Bright inner fill of the doorway. */
+  /** Hot centre of the vortex, and the darker of its two alternating bands. */
   core: string
-  /** Ground pool and shimmer. Low alpha; drawn with `lighter`. */
+  /** Ground pool. Low alpha; drawn with `lighter`. */
   glow: string
-  /** One-pixel outline. Load-bearing: it is the edge that survives the biome tint multiply. */
+  /**
+   * One-pixel outline, and the lighter of the vortex's two alternating bands.
+   * Load-bearing: it is the edge that survives the biome tint multiply.
+   */
   rim: string
   /** An 8x8 geometric glyph bobbing above the arch. Drawn, never typeset. */
   icon: 'book' | 'question' | 'speech' | 'lock'
 }
 
-const arch: Still = { src: '/sprites/props/doorway_pair.png', w: 32, h: 32 }
+const arch: Still = { src: '/sprites/props/portal_arch.png', w: 32, h: 48 }
 const lantern: Still = { src: '/sprites/props/lantern.png', w: 16, h: 32 }
 
 export const PORTALS: Record<PortalKind, PortalArt> = {
