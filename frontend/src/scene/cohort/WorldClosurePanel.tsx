@@ -27,6 +27,7 @@ import type { CohortOut } from '../../api/types'
 import type { ConceptProgress } from '../pedagogy'
 import type { BoardRow } from './cohortStats'
 import { classSnapshot, masterySummary } from './cohortStats'
+import { CohortChallenge } from './CohortChallengePanel'
 
 export interface WorldClosurePanelProps {
   /** The world's title, for the closing line. */
@@ -195,6 +196,8 @@ export function WorldClosurePanel({
           </p>
         )
       )}
+
+      {cohort && <CohortChallenge cohort={cohort} />}
 
       <div className="mt-7 flex flex-wrap items-center gap-3">
         {onLeave ? (
