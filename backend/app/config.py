@@ -38,6 +38,20 @@ class Settings(BaseSettings):
     llm_timeout_s: float = 120.0
     llm_explain_timeout_s: float = 55.0
 
+    # Abuse controls. The link goes out on a QR code, so the defaults are the
+    # production values, not the permissive ones: a deployment that forgets to
+    # set these is still defended. Only the tests turn the limiter off.
+    rate_limit_enabled: bool = True
+    #: Read the caller's address out of `X-Forwarded-For`. True because Traefik
+    #: terminates TLS in front of this app; False when nothing is in front of
+    #: it, where the header would be pure attacker input. See `ratelimit.py`.
+    trust_forwarded_for: bool = True
+    #: Servers one account may own. Every server is a generation run.
+    max_servers_per_user: int = 5
+    #: Generation threads allowed at once, across everyone. SQLite has one
+    #: writer and the box is a small ARM instance.
+    max_concurrent_generations: int = 3
+
     max_worlds: int = 6
     segment_chars: int = 1500
     max_upload_mb: int = 10
