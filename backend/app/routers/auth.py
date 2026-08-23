@@ -6,6 +6,7 @@ from app import models
 from app.db import get_db
 from app.deps import current_user
 from app.ids import new_id, utc_now_iso
+from app.ratelimit import RateLimit
 from app.schemas import LoginIn, ProfileUpdateIn, RegisterIn, TokenOut, UserOut
 from app.security import create_token, hash_password, verify_password
 
@@ -24,7 +25,13 @@ def _token_out(user: models.User) -> TokenOut:
     "/register",
     response_model=TokenOut,
     status_code=status.HTTP_201_CREATED,
-    responses={409: {"description": "Email already registered"}},
+    # Loose on purpose: a lecture theatre scanning one QR code is a single
+    # address, so this is sized to let a room in and keep a script out.
+    dependencies=[Depends(RateLimit("register"))],
+    responses={
+        409: {"description": "Email already registered"},
+        429: {"description": "Too many registrations from this address"},
+    },
 )
 def register(body: RegisterIn, db: Session = Depends(get_db)):
     exists = db.query(models.User.id).filter_by(email=body.email).first()
@@ -45,7 +52,11 @@ def register(body: RegisterIn, db: Session = Depends(get_db)):
 @router.post(
     "/login",
     response_model=TokenOut,
-    responses={401: {"description": "Invalid email or password"}},
+    dependencies=[Depends(RateLimit("login"))],
+    responses={
+        401: {"description": "Invalid email or password"},
+        429: {"description": "Too many attempts from this address"},
+    },
 )
 def login(body: LoginIn, db: Session = Depends(get_db)):
     user = db.query(models.User).filter_by(email=body.email).one_or_none()
