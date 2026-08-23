@@ -3,6 +3,7 @@ import { api } from '../api/client'
 import type { TokenOut } from '../api/types'
 import { readableError } from './errors'
 import { Brand } from './Brand'
+import { FIXTURE_HREF } from '../nav/routes'
 
 interface AuthScreenProps {
   onAuthenticated: (session: TokenOut) => void
@@ -78,7 +79,10 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
           </form>
 
           <div className="my-6 flex items-center gap-4" aria-hidden="true"><span className="h-px flex-1 bg-white/10" /><span className="font-hud text-xs text-ink-muted">OR</span><span className="h-px flex-1 bg-white/10" /></div>
-          <a className="button-secondary w-full" href="/demo">Walk the demo world</a>
+          {/* A world you can actually walk, not the scripted encounter at
+              /demo: the label promised one and delivered the other. Bundled,
+              so it needs no account and no network. */}
+          <a className="button-secondary w-full" href={FIXTURE_HREF}>Walk the demo world</a>
 
           <p className="mt-6 text-center text-sm text-ink-muted">
             {mode === 'login' ? 'New to ClassQuest?' : 'Already have an account?'}{' '}
