@@ -3,6 +3,7 @@ import { api } from '../api/client'
 import type { ServerSummary, User } from '../api/types'
 import { readableError } from './errors'
 import { Brand } from './Brand'
+import { CohortStatusCard } from './CohortStatusCard'
 
 interface ServerHubProps {
   user: User
@@ -190,6 +191,7 @@ function ServerCard({ server }: { server: ServerSummary }) {
       <div className="flex items-start justify-between gap-3"><div><h3 className="font-bold text-ink">{server.name}</h3><p className="mt-1 line-clamp-2 text-sm text-ink-muted">{server.description || `${server.pet} guide · ${server.member_count} member${server.member_count === 1 ? '' : 's'}`}</p></div><span className={`text-xs font-extrabold uppercase tracking-[0.12em] ${statusColor}`}>{server.status}</span></div>
       <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-ink-muted"><span>{server.world_count} world{server.world_count === 1 ? '' : 's'}</span>{server.join_code && <><span aria-hidden="true">·</span><span>Code <strong className="font-hud text-[10px] tracking-[0.08em] text-ink">{server.join_code}</strong></span></>}</div>
       {server.error && <p className="mt-3 text-xs text-error">{server.error}</p>}
+      {server.status === 'ready' && <CohortStatusCard serverId={server.id} />}
     </a>
   )
 }
