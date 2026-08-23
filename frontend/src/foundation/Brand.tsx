@@ -1,20 +1,30 @@
 interface BrandProps {
   compact?: boolean
+  large?: boolean
   subtitle?: string
+  subtitleClass?: string
 }
 
-export function Brand({ compact = false, subtitle = 'Learn by playing' }: BrandProps) {
+export function Brand({ compact = false, large = false, subtitle = 'Learn by playing', subtitleClass = 'text-ink-muted' }: BrandProps) {
+  const logoClass = large
+    ? 'h-20 w-auto sm:h-24'
+    : compact
+      ? 'h-11 w-auto'
+      : 'h-32 w-auto sm:h-40'
+  const wordmarkSize = large ? 'text-2xl' : 'text-xs'
+  const subtitleSize = large ? 'text-base' : 'text-[11px]'
+
   return (
-    <div className="brand-lockup flex items-center gap-3">
+    <div className="brand-lockup flex items-center gap-4">
       <img
-        className={compact ? 'h-11 w-auto' : 'h-32 w-auto sm:h-40'}
+        className={logoClass}
         src="/brand/classquest-logo.png"
         alt="ClassQuest"
       />
-      {compact && (
+      {(compact || large) && (
         <div className="hidden sm:block">
-          <p className="font-hud text-xs tracking-[0.08em] text-ink">ClassQuest</p>
-          <p className="mt-1 text-[11px] text-ink-muted">{subtitle}</p>
+          <p className={`font-hud tracking-[0.08em] text-ink ${wordmarkSize}`}>ClassQuest</p>
+          <p className={`mt-1 ${subtitleSize} ${subtitleClass}`}>{subtitle}</p>
         </div>
       )}
     </div>

@@ -131,7 +131,7 @@ export function DemoExperience() {
     <div className="min-h-screen overflow-hidden bg-quest-grid">
       <header className="border-b border-white/10 bg-background-raised/90 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
-          <Brand compact subtitle="Wrong-Turn Quest" />
+          <Brand large subtitle="Wrong-Turn Quest" subtitleClass="font-bold text-yellow-300" />
           <div className="flex items-center gap-3">
             <span className="hidden items-center gap-2 rounded-full border border-secondary/25 bg-secondary/10 px-3 py-1.5 text-xs font-bold text-secondary sm:inline-flex">
               <span className="h-2 w-2 rounded-full bg-secondary" aria-hidden="true" /> Offline demo
@@ -145,12 +145,12 @@ export function DemoExperience() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
+      <main className="mx-auto max-w-7xl px-4 pt-3 pb-8 sm:px-6 sm:pt-4 sm:pb-12 lg:px-8 lg:pt-6 lg:pb-12">
         <div className="mb-7 flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 font-hud text-[9px] tracking-[0.1em] text-primary">WRONG-TURN QUEST</span>
-              <span className="font-hud text-[9px] tracking-[0.1em] text-ink-muted">{encounter.chapter.title}</span>
+              <span className="rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 font-hud text-xs tracking-[0.1em] text-primary sm:text-sm">WRONG-TURN QUEST</span>
+              <span className="font-hud text-base font-bold tracking-[0.1em] text-ink sm:text-lg">{encounter.concept.label}</span>
             </div>
             <h1 className="mt-4 text-3xl font-black tracking-tight text-ink sm:text-4xl lg:text-5xl">Misconception Detective</h1>
             <p className="mt-3 max-w-2xl text-base leading-7 text-ink-muted sm:text-lg">Make a prediction, inspect the evidence, then prove the concept transfers.</p>
@@ -196,8 +196,8 @@ function IntroStage({ title, conceptLabel, summary, lines, onStart }: { title: s
   return (
     <div className="grid gap-8 lg:grid-cols-[1fr_14rem] lg:items-center">
       <div>
-        <p className="eyebrow">Case file / {title}</p>
-        <h2 className="mt-3 text-3xl font-black tracking-tight sm:text-4xl">Recover the idea behind {conceptLabel.toLowerCase()}.</h2>
+        <p className="eyebrow !text-base sm:!text-lg">Case file / {title}</p>
+        <h2 className="mt-3 text-2xl font-black tracking-tight sm:text-3xl lg:text-4xl">Recover the idea behind <span className="whitespace-nowrap">{conceptLabel.toLowerCase()}.</span></h2>
         <p className="mt-4 max-w-2xl text-lg leading-8 text-ink-muted">{summary}</p>
         {lines.length > 0 && <blockquote className="mt-7 border-l-2 border-secondary pl-5 text-base italic leading-7 text-ink">“{lines.join(' ')}”</blockquote>}
         <div className="mt-8 flex flex-wrap items-center gap-4">
@@ -215,7 +215,7 @@ function IntroStage({ title, conceptLabel, summary, lines, onStart }: { title: s
 function PredictionStage({ prompt, options, selectedId, committed, choiceCorrect, onSelect, onCommit, onContinue }: { prompt: string; options: Option[]; selectedId: string | null; committed: boolean; choiceCorrect: boolean; onSelect: (optionId: string) => void; onCommit: () => void; onContinue: () => void }) {
   return (
     <div className="max-w-3xl">
-      <p className="eyebrow">Prediction gate</p>
+      <p className="eyebrow !text-base sm:!text-lg">Prediction gate</p>
       <h2 className="mt-3 text-2xl font-black leading-tight sm:text-3xl">{prompt}</h2>
       <p className="mt-3 text-ink-muted">Commit to the answer that feels most defensible. The wrong turn is useful evidence.</p>
       <div className="mt-7"><AnswerChoices options={options} selectedId={selectedId} locked={committed} label={prompt} onSelect={onSelect} /></div>
@@ -231,7 +231,7 @@ function PredictionStage({ prompt, options, selectedId, committed, choiceCorrect
 function DiagnosisStage({ correct, reveal, misconception, onContinue }: { correct: boolean; reveal: string; misconception: Misconception | null; onContinue: () => void }) {
   return (
     <div className="max-w-3xl">
-      <p className="eyebrow">Misconception diagnosis</p>
+      <p className="eyebrow !text-base sm:!text-lg">Misconception diagnosis</p>
       <h2 className="mt-3 text-3xl font-black">{correct ? 'Signal recognised.' : 'Wrong turn detected.'}</h2>
       {misconception ? (
         <div className="mt-7 space-y-4" aria-live="polite">
@@ -253,7 +253,7 @@ function Insight({ label, text, tone = 'neutral' }: { label: string; text: strin
 function SourceStage({ quote, title, segment, onContinue }: { quote: string; title: string; segment: number; onContinue: () => void }) {
   return (
     <div className="max-w-3xl">
-      <p className="eyebrow">Verified source receipt</p>
+      <p className="eyebrow !text-base sm:!text-lg">Verified source receipt</p>
       <h2 className="mt-3 text-3xl font-black">Check the claim against the course.</h2>
       <div className="relative mt-8 overflow-hidden rounded-2xl border border-secondary/30 bg-background/45 p-6 sm:p-8">
         <div className="absolute right-0 top-0 h-28 w-28 translate-x-8 -translate-y-8 rounded-full bg-secondary/10 blur-2xl" aria-hidden="true" />
@@ -269,7 +269,7 @@ function SourceStage({ quote, title, segment, onContinue }: { quote: string; tit
 function TransferStage({ prompt, options, selectedId, committed, correct, reveal, misconception, attempts, onSelect, onCommit, onRetry, onContinue }: { prompt: string; options: Option[]; selectedId: string | null; committed: boolean; correct: boolean; reveal: string; misconception: Misconception | null; attempts: number; onSelect: (optionId: string) => void; onCommit: () => void; onRetry: () => void; onContinue: () => void }) {
   return (
     <div className="max-w-3xl">
-      <div className="flex flex-wrap items-center justify-between gap-3"><p className="eyebrow">Transfer retry</p>{attempts > 0 && <span className="text-xs font-semibold text-ink-muted">Attempts: {attempts}</span>}</div>
+      <div className="flex flex-wrap items-center justify-between gap-3"><p className="eyebrow !text-base sm:!text-lg">Transfer retry</p>{attempts > 0 && <span className="text-xs font-semibold text-ink-muted">Attempts: {attempts}</span>}</div>
       <h2 className="mt-3 text-2xl font-black leading-tight sm:text-3xl">{prompt}</h2>
       <p className="mt-3 text-ink-muted">The situation changed. The underlying concept did not.</p>
       <div className="mt-7"><AnswerChoices options={options} selectedId={selectedId} locked={committed} label={prompt} onSelect={onSelect} /></div>

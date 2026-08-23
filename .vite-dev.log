@@ -1,0 +1,52 @@
+
+> frontend@0.0.0 dev
+> vite
+
+2:45:15 AM [vite] (client) Re-optimizing dependencies because vite config has changed
+Port 5173 is in use, trying another one...
+
+  VITE v8.2.2  ready in 1068 ms
+
+  ➜  Local:   http://localhost:5174/
+  ➜  Network: use --host to expose
+2:51:57 AM [vite] (client) hmr update /src/index.css, /src/demo/DemoExperience.tsx
+2:52:25 AM [vite] (client) hmr update /src/index.css, /src/demo/DemoExperience.tsx
+2:52:27 AM [vite] (client) hmr update /src/index.css, /src/demo/DemoExperience.tsx
+2:53:16 AM [vite] (client) hmr update /src/index.css, /src/demo/DemoExperience.tsx
+2:53:17 AM [vite] (client) hmr update /src/index.css, /src/demo/DemoExperience.tsx
+2:53:43 AM [vite] (client) hmr update /src/index.css, /src/demo/DemoExperience.tsx
+2:53:44 AM [vite] (client) hmr update /src/index.css, /src/demo/DemoExperience.tsx
+2:54:12 AM [vite] (client) hmr update /src/index.css, /src/demo/DemoExperience.tsx
+2:55:18 AM [vite] (client) hmr update /src/index.css, /src/demo/DemoExperience.tsx
+2:55:19 AM [vite] (client) hmr update /src/index.css, /src/demo/DemoExperience.tsx
+2:56:22 AM [vite] (client) hmr update /src/index.css, /src/demo/DemoExperience.tsx
+2:56:23 AM [vite] (client) hmr update /src/index.css, /src/demo/DemoExperience.tsx
+2:56:53 AM [vite] (client) hmr update /src/index.css, /src/demo/DemoExperience.tsx
+2:56:54 AM [vite] (client) hmr update /src/index.css, /src/demo/DemoExperience.tsx
+2:57:08 AM [vite] (client) hmr update /src/index.css, /src/demo/DemoExperience.tsx
+2:57:09 AM [vite] (client) hmr update /src/index.css, /src/demo/DemoExperience.tsx
+2:59:08 AM [vite] (client) hmr update /src/index.css, /src/demo/DemoExperience.tsx
+2:59:09 AM [vite] (client) hmr update /src/index.css, /src/demo/DemoExperience.tsx
+3:01:58 AM [vite] (client) hmr update /src/index.css, /src/foundation/ProfileScreen.tsx
+3:02:06 AM [vite] (client) hmr update /src/index.css, /src/foundation/ServerHub.tsx
+3:02:07 AM [vite] (client) hmr update /src/index.css, /src/foundation/ServerHub.tsx
+3:02:17 AM [vite] (client) hmr update /src/index.css, /src/foundation/ServerHub.tsx
+3:02:18 AM [vite] (client) hmr update /src/index.css, /src/foundation/ServerHub.tsx
+3:04:56 AM [vite] (client) hmr update /src/index.css, /src/foundation/ProfileScreen.tsx
+3:04:56 AM [vite] (client) hmr update /src/index.css, /src/foundation/ProfileScreen.tsx
+3:05:28 AM [vite] (client) hmr update /src/index.css, /src/foundation/ProfileScreen.tsx
+3:07:53 AM [vite] (client) hmr update /src/index.css, /src/foundation/ProfileScreen.tsx
+3:07:53 AM [vite] (client) hmr update /src/index.css, /src/foundation/ServerHub.tsx
+3:09:01 AM [vite] (client) hmr update /src/index.css, /src/foundation/ProfileScreen.tsx
+3:10:18 AM [vite] (client) hmr update /src/index.css, /src/foundation/ProfileScreen.tsx
+8:53:04 AM [vite] (client) hmr update /src/index.css, /src/foundation/ProfileScreen.tsx
+8:53:25 AM [vite] (client) hmr update /src/index.css, /src/foundation/ProfileScreen.tsx
+9:03:24 AM [vite] (client) hmr update /src/index.css, /src/foundation/ProfileScreen.tsx
+9:07:44 AM [vite] (client) hmr update /src/index.css, /src/foundation/ProfileScreen.tsx
+9:08:51 AM [vite] (client) hmr update /src/index.css, /src/foundation/ProfileScreen.tsx
+9:08:53 AM [vite] (client) hmr update /src/index.css, /src/foundation/ProfileScreen.tsx
+9:11:22 AM [vite] (client) hmr update /src/index.css, /src/foundation/ProfileScreen.tsx
+9:12:05 AM [vite] (client) hmr update /src/index.css, /src/foundation/ProfileScreen.tsx
+9:12:23 AM [vite] (client) hmr update /src/index.css, /src/foundation/ProfileScreen.tsx
+9:12:58 AM [vite] (client) hmr update /src/index.css, /src/foundation/ProfileScreen.tsx
+9:13:52 AM [vite] (client) hmr update /src/index.css, /src/foundation/ProfileScreen.tsx

@@ -35,11 +35,18 @@ export function ProfileScreen({ user, onSaved, onSignOut }: ProfileScreenProps) 
   return (
     <main className="min-h-screen bg-app-grid px-4 py-8 sm:grid sm:place-items-center">
       <section className="cq-panel w-full max-w-3xl overflow-hidden">
-        <header className="flex items-center justify-between border-b border-white/10 bg-background-raised/80 px-6 py-4 sm:px-10"><Brand compact subtitle="Hero setup" /><button type="button" className="button-secondary min-h-9 px-3 py-1.5 text-xs" onClick={onSignOut}>Sign out</button></header>
-        <div className="p-6 sm:p-10">
+        <header className="flex items-center justify-between border-b border-white/10 bg-background-raised/80 px-6 py-4 sm:px-10"><Brand large subtitle="Hero setup" subtitleClass="font-bold text-yellow-300" /><button type="button" className="button-secondary min-h-9 px-3 py-1.5 text-xs" onClick={onSignOut}>Sign out</button></header>
+        <div className="px-6 pb-8 sm:px-10 sm:pb-12 lg:pb-12">
         <div className="flex items-start justify-between gap-4">
-          <div><p className="eyebrow">Hero profile · one quick setup</p><h1 className="mt-3 text-3xl font-extrabold">Make ClassQuest fit you.</h1><p className="mt-3 max-w-xl leading-7 text-ink-muted">Choose your path so future questions and worlds can meet you at the right level.</p></div>
-          <img className="pixel-art hidden h-20 w-20 object-contain sm:block" src="/brand/sprites/explorer.png" alt="" aria-hidden="true" />
+          <div>
+            <div className="flex items-center gap-3">
+              <p className="eyebrow !text-base sm:!text-lg">Hero profile · one quick setup</p>
+              <img className="pixel-art h-14 w-14 object-contain sm:h-16 sm:w-16 lg:h-20 lg:w-20" src="/brand/sprites/explorer.png" alt="" aria-hidden="true" />
+            </div>
+            <h1 className="-mt-1 text-3xl font-black tracking-tight text-ink sm:text-4xl lg:text-5xl">Make ClassQuest fit you.</h1>
+            <p className="mt-3 max-w-2xl text-base leading-7 text-ink-muted sm:text-lg">Choose your path so future questions and worlds can meet you at the right level.</p>
+          </div>
+
         </div>
 
         {error && <div className="mt-6 rounded-xl border border-error/25 bg-error/8 p-4 text-sm text-error" role="alert">{error}</div>}
@@ -59,7 +66,7 @@ export function ProfileScreen({ user, onSaved, onSignOut }: ProfileScreenProps) 
           </fieldset>
           <label className="block sm:col-span-2"><span className="field-label">Subject or industry</span><input className="field" value={industry} onChange={(event) => setIndustry(event.target.value)} placeholder="e.g. Computer science, finance, biology" maxLength={80} /></label>
           <label className="block sm:col-span-2"><span className="field-label">What are you hoping to learn or teach?</span><textarea className="field min-h-28 resize-y" value={about} onChange={(event) => setAbout(event.target.value)} placeholder="A short note is enough for now." maxLength={2000} /></label>
-          <div className="sm:col-span-2"><button className="button-primary w-full sm:w-auto" type="submit" disabled={busy}>{busy ? 'Saving profile…' : 'Begin the journey →'}</button></div>
+          <div className="sm:col-span-2 flex justify-center"><button className="button-primary w-full sm:w-auto" type="submit" disabled={busy}>{busy ? 'Saving profile…' : 'Begin the journey →'}</button></div>
         </form>
         </div>
       </section>
