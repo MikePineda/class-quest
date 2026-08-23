@@ -22,3 +22,8 @@ dist/
 .vscode/
 # course material never enters the repo (hackathon rule)
 course-input/
+
+# Vite dev server logs
+.vite-dev.log
+.vite-dev.log.err
+.vite-dev.err
