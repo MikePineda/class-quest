@@ -61,7 +61,7 @@ def test_demo_server_listed_public_with_null_join_code(client):
 def test_demo_server_joinable(client):
     seed.ensure_demo_server()
     reg = client.post("/auth/register", json={
-        "email": "student@example.com", "password": "password123", "display_name": "Student",
+        "email": "student@example.com", "password": "thistle marmalade rowboat", "display_name": "Student",
     })
     token = reg.json()["token"]
     r = client.post(

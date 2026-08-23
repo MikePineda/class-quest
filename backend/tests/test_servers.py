@@ -24,7 +24,7 @@ def _content(min_chars=450):
 
 def _register(client, email="owner@example.com", name="Owner"):
     r = client.post("/auth/register", json={
-        "email": email, "password": "password123", "display_name": name,
+        "email": email, "password": "thistle marmalade rowboat", "display_name": name,
     })
     assert r.status_code == 201, r.text
     return r.json()["token"]
