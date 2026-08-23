@@ -14,6 +14,7 @@ from app.db import get_db
 from app.deps import current_user, current_user_optional, require_membership
 from app.ids import join_code as new_join_code
 from app.ids import new_id, utc_now_iso
+from app.ratelimit import RateLimit
 from app.services import generate, ingest, progress
 
 router = APIRouter(prefix="/servers", tags=["servers"])
@@ -130,10 +131,24 @@ def _unique_join_code(db: Session) -> str:
 # ------------------------------------------------------------------- routes
 
 
-@router.post("", response_model=schemas.ServerSummary, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=schemas.ServerSummary,
+    status_code=status.HTTP_201_CREATED,
+    # The single most expensive endpoint in the app: one call starts a thread
+    # that makes dozens of model calls. Keyed by account, not address, so a
+    # shared classroom network is not one budget for the whole room.
+    dependencies=[Depends(RateLimit("create_server", by="user"))],
+    responses={
+        429: {"description": "Too many courses created by this account"},
+        503: {"description": "The generator is at capacity; try again shortly"},
+    },
+)
 def create_server(
-    name: str = Form(...),
-    description: str | None = Form(None),
+    # Bounded because the values are stored and shown to everyone in the
+    # server: unbounded Form fields are a free write channel into the database.
+    name: str = Form(..., min_length=1, max_length=120),
+    description: str | None = Form(None, max_length=600),
     is_public: bool = Form(False),
     pet: str = Form(..., max_length=32),
     text: str | None = Form(None),
@@ -142,6 +157,26 @@ def create_server(
     db: Session = Depends(get_db),
 ):
     s = get_settings()
+
+    # Both ceilings are checked before a byte is read: refusing early is the
+    # difference between a cheap 503 and ten megabytes of parsing we throw away.
+    owned = (
+        db.query(models.Membership)
+        .filter_by(user_id=user.id, role="owner")
+        .count()
+    )
+    if owned >= s.max_servers_per_user:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"You already own {owned} courses, which is the limit. Delete one to make another.",
+        )
+    if not generate.has_capacity():
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "The world generator is busy right now. Try again in a minute.",
+            headers={"Retry-After": "60"},
+        )
+
     if len(files) > s.max_files:
         raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                             f"Too many files: max {s.max_files}")
@@ -207,7 +242,14 @@ def create_server(
     db.commit()
     db.refresh(server)
 
-    generate.start_pipeline(server.id)
+    try:
+        generate.start_pipeline(server.id)
+    except generate.GeneratorBusy:
+        # Lost the last slot between the check above and here. The row exists,
+        # so it has to be told the truth rather than left processing forever.
+        server.status = "failed"
+        server.error = "The world generator was busy. Delete this course and try again."
+        db.commit()
 
     membership = db.query(models.Membership).filter_by(server_id=server.id, user_id=user.id).one()
     return _server_summary(db, server, user.id, membership)
@@ -241,7 +283,14 @@ def list_public_servers(
     return schemas.ServersOut(servers=servers)
 
 
-@router.post("/join", response_model=schemas.JoinOut)
+@router.post(
+    "/join",
+    response_model=schemas.JoinOut,
+    # Six characters out of a 31-letter alphabet is ~900 million codes, which
+    # is plenty against a human and nothing against a loop.
+    dependencies=[Depends(RateLimit("join"))],
+    responses={429: {"description": "Too many join attempts from this address"}},
+)
 def join_server(
     body: schemas.JoinIn, user: models.User = Depends(current_user), db: Session = Depends(get_db)
 ):

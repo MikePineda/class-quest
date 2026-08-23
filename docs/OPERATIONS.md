@@ -76,6 +76,41 @@ SEED_DEMO=true
 `GET /health` reports `llm: "live"` when a key is set and `llm: "fixtures"` when it is not.
 That field is the fastest way to tell which mode production is in.
 
+### Handing the link to strangers
+
+`JWT_SECRET` must be a real random value in the panel. The app logs a warning at startup when
+it is still the dev default, and it will happily run that way — every session token in the wild
+would then be forgeable by anyone who has read this repo.
+
+The abuse controls all default to their production values, so a deployment that sets none of
+them is still defended. They exist because `POST /servers` starts a thread that makes dozens of
+model calls, so an unbounded sign-up page is an unbounded bill:
+
+```
+RATE_LIMIT_ENABLED=true            # only the test suite turns this off
+TRUST_FORWARDED_FOR=true           # true behind Traefik; false if nothing proxies the app
+MAX_SERVERS_PER_USER=5
+MAX_CONCURRENT_GENERATIONS=3
+```
+
+`TRUST_FORWARDED_FOR` decides where the caller's address is read from. Behind Traefik the
+socket peer is the proxy, so the address comes from the **rightmost** `X-Forwarded-For` hop —
+the one the proxy appended and the only one a caller cannot write themselves. With nothing in
+front of the app that header is pure attacker input and this must be `false`.
+
+The limits are sized so a full classroom behind one NAT never sees a `429`: registering,
+signing in and joining are per address and loose, creating a course and grading an explanation
+are per **account**, and the public demo chat is per address *and* under a global ceiling. They
+are counted in this process, which is correct only because uvicorn runs `--workers 1`. A second
+worker makes every number per-worker; see the note at the top of `backend/app/ratelimit.py`.
+
+Two things to know when watching the box during a demo:
+
+- a `503` from `POST /servers` is the generator at capacity, not a crash. It clears on its own.
+- `POST /demo/explain/turn` is the only unauthenticated endpoint that reaches the model. It
+  loads its concept from `fixtures/` on the box, so it cannot be pointed at a caller's own
+  prompt, and it writes nothing.
+
 ## The LLM
 
 MiniMax is reached through the `anthropic` SDK pointed at MiniMax's Anthropic-compatible
@@ -100,6 +135,10 @@ cd backend && .venv/bin/python -m scripts.llm_spike
 
 # 2. Is production alive and in which mode?
 curl -s https://api.classquest.net/health
+
+# 2b. Does the signed-out demo chat answer? (no account, awards nothing)
+curl -s -X POST https://api.classquest.net/demo/explain/turn -H 'Content-Type: application/json' \
+  -d '{"bundle":"pybasics","concept_id":"variables","turns":[{"role":"learner","text":"A variable is a name bound to a value in memory."}]}'
 
 # 3. Full user journey against production (register -> create -> poll -> play -> leaderboard)
 #    The sequence is in README.md.

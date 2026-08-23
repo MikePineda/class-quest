@@ -179,3 +179,38 @@ def test_call_json_truncates_raw_in_repair(monkeypatch, llm_on):
     fake = _install(monkeypatch, "x" * 10_000, '"ok": 1}')
     llm.call_json("s", "u", max_tokens=10)
     assert len(fake.messages.calls[1]["messages"][1]["content"]) == 4000
+
+
+# ------------------------------------------------- what a failure is allowed to say
+#
+# `World.error` is served straight to whoever opens the server, so the provider's
+# own message -- a JSON blob carrying a request id -- must never be what lands
+# there. These are the failures that actually happen on a demo day.
+
+
+class _Status(Exception):
+    """Stands in for an anthropic error: the mapping reads `status_code`."""
+
+    def __init__(self, status_code):
+        super().__init__("provider blob with a request_id in it")
+        self.status_code = status_code
+
+
+def test_a_spent_quota_says_so_in_words():
+    assert llm.describe_api_error(_Status(429)) == "the model is out of quota right now"
+
+
+@pytest.mark.parametrize("status", [401, 403])
+def test_a_rejected_key_says_so_in_words(status):
+    assert llm.describe_api_error(_Status(status)) == "the model rejected our key"
+
+
+@pytest.mark.parametrize("status", [500, 503, 599])
+def test_a_broken_provider_says_so_in_words(status):
+    assert llm.describe_api_error(_Status(status)) == "the model is having trouble right now"
+
+
+def test_an_unmapped_failure_still_leaks_neither_blob_nor_request_id():
+    described = llm.describe_api_error(_Status(418))
+    assert described == "_Status"
+    assert "request_id" not in described

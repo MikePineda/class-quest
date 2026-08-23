@@ -2,13 +2,13 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import models  # noqa: F401  (register tables on Base)
 from app.config import get_settings
 from app.db import Base, engine
-from app.routers import auth, meta, servers, worlds
+from app.routers import auth, demo, meta, servers, worlds
 
 log = logging.getLogger("classquest")
 
@@ -44,8 +44,23 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    # Cheap, universal hardening. Not a substitute for anything above it: the
+    # API answers JSON to a separate origin, so these matter less here than on
+    # the web image (`frontend/nginx.conf`) — but a response that can be framed
+    # or content-sniffed costs nothing to refuse.
+    @app.middleware("http")
+    async def _security_headers(request: Request, call_next):
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        # No browser should ever be asking this origin for a document.
+        response.headers.setdefault("Cross-Origin-Resource-Policy", "cross-origin")
+        return response
+
     app.include_router(meta.router)
     app.include_router(auth.router)
+    app.include_router(demo.router)
     app.include_router(servers.router)
     app.include_router(worlds.router)
     return app

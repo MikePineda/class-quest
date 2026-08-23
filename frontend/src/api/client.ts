@@ -93,6 +93,13 @@ export const api = {
   /** Stateless: post the whole conversation every time. A retry re-posts an identical body. */
   explainTurn: (id: string, body: T.ExplainChatIn) =>
     req<T.ExplainChatOut>('POST', `/worlds/${id}/explain/turn`, body),
+
+  /**
+   * The Socratic chat for a world that has no server behind it. No auth, no
+   * world id, and nothing is awarded — see `DemoExplainChatIn`.
+   */
+  demoExplainTurn: (body: T.DemoExplainChatIn) =>
+    req<T.ExplainChatOut>('POST', '/demo/explain/turn', body),
 }
 
 export type Api = typeof api

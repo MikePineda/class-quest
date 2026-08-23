@@ -24,7 +24,7 @@ import { FLOOR, TILE, WALL, tileAt } from './types'
 import type { Anim, Biome, PortalKind, PortalNode, SceneNode, Still, WorldMap } from './types'
 import type { PlayerBody } from './usePlayer'
 import type { PortalArt } from './vocabulary'
-import { actorArt, biomeFor, portalArt, propArt } from './vocabulary'
+import { actorArt, biomeFor, PLAYER_GEAR, portalArt, propArt } from './vocabulary'
 import { CHART_BOX, drawChartFrame as plotChartFrame } from './vn/chartFrameArt'
 
 /** The learner walks the world as the explorer; the other actors stand at their scenes. */
@@ -160,6 +160,7 @@ function sourcesFor(map: WorldMap): string[] {
   const playerArt = actorArt(PLAYER_ACTOR)
   sources.add(playerArt.idle.src)
   if (playerArt.run) sources.add(playerArt.run.src)
+  sources.add(PLAYER_GEAR.sprite.src)
 
   for (const room of map.rooms) {
     const biome = biomeFor(room.background)
@@ -336,6 +337,25 @@ export function WorldCanvas({ map, player, cleared, activePortal }: WorldCanvasP
         return
       }
       ctx.drawImage(sprite, index * size, 0, size, size, dx, dy, size, size)
+    }
+
+    /** What the player carries, laid over whichever frame is on screen. */
+    const drawGear = (centreX: number, footY: number, flip: boolean) => {
+      const { sprite, offset } = PLAYER_GEAR
+      const sheet = image(sprite.src)
+      if (!sheet) return
+      const dy = Math.round(footY - sprite.h - offset.y)
+      if (flip) {
+        // Mirror about the actor's own centre, not the sprite's, or the sword
+        // crosses to the other hip and drifts by twice the offset.
+        ctx.save()
+        ctx.translate(centreX, 0)
+        ctx.scale(-1, 1)
+        ctx.drawImage(sheet, Math.round(offset.x), dy, sprite.w, sprite.h)
+        ctx.restore()
+        return
+      }
+      ctx.drawImage(sheet, Math.round(centreX + offset.x), dy, sprite.w, sprite.h)
     }
 
     const drawShadow = (centreX: number, footY: number) => {
@@ -804,13 +824,20 @@ export function WorldCanvas({ map, player, cleared, activePortal }: WorldCanvasP
         drawAnim(actorArt(node.actor).idle, centreX, footY, seconds, false)
       }
 
-      // 9. The player, on top of the world they are walking through.
+      // 9. The player, on top of the world they are walking through, with what
+      //    they carry over the top of that. The sword is a still rather than a
+      //    frame of the sheet — see the note in `vocabulary.ts` — so it is
+      //    positioned from the frame's bottom centre, which is the one anchor
+      //    the 32px idle sheet and the 64px run sheet share. It mirrors with
+      //    the actor so it stays on the same hip in both directions.
       const art = actorArt(PLAYER_ACTOR)
       const anim = body.moving && art.run ? art.run : art.idle
       const playerX = body.x * TILE
       const playerFoot = body.y * TILE + TILE * 0.45
+      const flipped = body.facing === 'left'
       drawShadow(playerX, playerFoot)
-      drawAnim(anim, playerX, playerFoot, seconds, body.facing === 'left')
+      drawAnim(anim, playerX, playerFoot, seconds, flipped)
+      drawGear(playerX, playerFoot, flipped)
 
       // A vignette in screen space, to pull the eye to the middle of the room.
       ctx.setTransform(1, 0, 0, 1, 0, 0)
