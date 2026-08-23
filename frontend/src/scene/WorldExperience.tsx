@@ -16,14 +16,22 @@
  * empty panel: a door that will not budge is honest, a door onto nothing is a
  * bug the audience can see.
  *
- * Three ways in. With a `worldId` it loads the learner's real world through
- * `api.getWorld` and builds the hub from `games.quest` (+ `games.gauntlet` and
- * `graph`, which is where misconceptions and source quotes live). Without one it
- * shows `WorldPicker`, because otherwise a generated world is only reachable by
- * typing its id into the address bar. `/world?demo=1` walks the bundled fixture,
- * the offline safety net for the pitch. The fixture is never used as a fallback
- * for a real world that failed to load: showing somebody else's course while
- * they asked for their own is worse than an honest error.
+ * Two ways in, and exactly one of the two props is always set. With a
+ * `worldId` it loads the learner's real world through `api.getWorld` and
+ * builds the hub from `games.quest` (+ `games.gauntlet` and `graph`, which is
+ * where misconceptions and source quotes live). With a `bundle` it walks a
+ * world compiled into the page — the offline safety net for the pitch, and the
+ * only thing a signed-out visitor can reach.
+ *
+ * The bundle is never used as a fallback for a real world that failed to load:
+ * showing somebody else's course while they asked for their own is worse than
+ * an honest error.
+ *
+ * `App` gives this component nothing but primitives, and must keep doing so.
+ * See the note on `portalSpecs` below, and the same warning in
+ * `docs/HANDOFF.md`: an unstable value reaching `WorldCanvas` reads as
+ * "movement is broken" *and* "the world never loads", and neither symptom
+ * points anywhere near the cause.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'

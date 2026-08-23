@@ -14,7 +14,7 @@ Everything the FE needs to talk to the backend. TypeScript mirror: `frontend/src
 | Errors | `{"detail": string \| list}` — see Gotchas |
 | Interactive docs | `GET /docs` (Swagger), `GET /openapi.json` (feeds `npm run gen:api`) |
 | CORS | `http://localhost:5173` and the prod web origin are allowed |
-| Demo account | `demo@classquest.app` / `demo1234`, public server "Demo: Intro to ML — Week 3", join code `DEMO01`, one `ready` world built from the fixtures |
+| Demo account | `demo@classquest.app` / `demo1234`. Two public servers, one `ready` world each, both built from the fixtures: "Demo: Programming Fundamentals — Week 1" (`PY101A`) and "Demo: Intro to ML — Week 3" (`DEMO01`) |
 
 Naming (Minecraft analogy): a **Server** is a class/course (name, join code, public/private, pet mascot). A **World** is one generated unit inside a server: a `CourseGraph` + a `quest` game + a `gauntlet` game. A user belongs to N servers.
 
@@ -386,7 +386,11 @@ The learner explains, an AI *student* asks follow-ups until it understands, and 
 
 ## Content contract (what you render)
 
-Full JSON Schemas: `schema/course-graph.schema.json`, `schema/game.schema.json`. Hand-written fixtures: `fixtures/overfitting.{graph,quest,gauntlet}.json` (copied into `frontend/src/fixtures/`).
+Full JSON Schemas: `schema/course-graph.schema.json`, `schema/game.schema.json`. Hand-written fixtures:
+`fixtures/pybasics.{graph,quest,gauntlet}.json` and `fixtures/overfitting.{graph,quest,gauntlet}.json`, each with
+the lecture text its `source_spans` quote (`pybasics_lecture.txt`, `demo_lecture.txt`). All copied into
+`frontend/src/fixtures/`; `scripts/check-fixtures-sync.sh` fails CI if the two copies diverge, and
+`python3 schema/validate.py` checks every bundle against its own graph.
 
 ### CourseGraph (`world.graph`)
 ```
@@ -426,7 +430,8 @@ Quest and gauntlet from the same world share `graph_id` (`wk3ml0a1` in the fixtu
 
 ## Gotchas
 
-- **`detail` may be a string or a list.** App errors: `{"detail": "invalid credentials"}`. Validation errors (422): `{"detail": [{"loc": ["body", "password"], "msg": "String should have at least 8 characters", "type": "string_too_short"}]}`. `ApiError.detail` carries it as-is; `ApiError.message` is the string form or `API error <status>`.
+- **Passwords must clear the policy in `backend/app/services/passwords.py`**: at least 10 characters, not a common password (the blocklist sees through `P@ssw0rd1!` and `password2024`), and not containing the user's own email local part or display name. No composition rule. A failure is a 422 whose `msg` is the user-facing sentence. `POST /auth/login` has no policy, so accounts predating it still work.
+- **`detail` may be a string or a list.** App errors: `{"detail": "invalid credentials"}`. Validation errors (422): `{"detail": [{"loc": ["body", "password"], "msg": "String should have at least 10 characters", "type": "string_too_short"}]}`. `ApiError.detail` carries it as-is; `ApiError.message` is the string form or `API error <status>`.
 - **Poll `GET /servers/{id}` every 2 s until `status` is `ready` or `failed`.** Do not poll faster. `pollServer(id, onTick)` returns a cancel function — call it on unmount.
 - **`games.gauntlet` can be `null` independently** of `games.quest` on a `ready` world (degraded mode when gauntlet generation failed). Hide the Conquest/boss entry, do not crash.
 - **The client never sends `correct`.** The server grades `option_id` against the stored game JSON.
