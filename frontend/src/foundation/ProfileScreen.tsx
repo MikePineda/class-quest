@@ -4,6 +4,13 @@ import type { Role, User } from '../api/types'
 import { readableError } from './errors'
 import { Brand } from './Brand'
 import { BackLink } from '../nav/BackLink'
+import {
+  loadLearningPreferences,
+  saveLearningPreferences,
+  type LearningGoal,
+  type LearningMode,
+  type SessionLength,
+} from './learningPreferences'
 
 interface ProfileScreenProps {
   user: User
@@ -16,6 +23,9 @@ export function ProfileScreen({ user, onSaved, onSignOut }: ProfileScreenProps) 
   const [role, setRole] = useState<Role>(user.role ?? 'student')
   const [industry, setIndustry] = useState(user.industry ?? '')
   const [about, setAbout] = useState(user.about ?? '')
+  const [mode, setMode] = useState<LearningMode>(() => loadLearningPreferences(user.id).mode)
+  const [goal, setGoal] = useState<LearningGoal>(() => loadLearningPreferences(user.id).goal)
+  const [sessionLength, setSessionLength] = useState<SessionLength>(() => loadLearningPreferences(user.id).sessionLength)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -25,6 +35,7 @@ export function ProfileScreen({ user, onSaved, onSignOut }: ProfileScreenProps) 
     setError(null)
     try {
       const updated = await api.updateMe({ display_name: displayName, role, industry, about })
+      saveLearningPreferences(user.id, { mode, goal, sessionLength })
       onSaved(updated)
     } catch (caught) {
       setError(readableError(caught))
@@ -58,12 +69,31 @@ export function ProfileScreen({ user, onSaved, onSignOut }: ProfileScreenProps) 
               ))}
             </div>
           </fieldset>
+          <fieldset className="sm:col-span-2">
+            <legend className="field-label">How do you want to learn today?</legend>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {([
+                ['solo', 'Solo practice', 'Private progress at your own pace.'],
+                ['async_group', 'Group, own pace', 'Share a server without needing to be online together.'],
+                ['live_group', 'Group, together', 'Join a live session when realtime play is available.'],
+                ['undecided', 'I’m not sure yet', 'Start solo and choose a group later.'],
+              ] as const).map(([value, label, description]) => (
+                <ChoiceCard key={value} name="learning-mode" value={value} checked={mode === value} onChange={() => setMode(value)} label={label} description={description} />
+              ))}
+            </div>
+          </fieldset>
+          <label className="block"><span className="field-label">What is your main goal?</span><select className="field" value={goal} onChange={(event) => setGoal(event.target.value as LearningGoal)}><option value="understand">Understand a difficult concept</option><option value="assessment">Prepare for an assessment</option><option value="review">Review lecture material</option><option value="confidence">Build confidence</option></select></label>
+          <label className="block"><span className="field-label">How much time do you have?</span><select className="field" value={sessionLength} onChange={(event) => setSessionLength(event.target.value as SessionLength)}><option value="quick">5–10 minutes</option><option value="focused">One focused session</option><option value="ongoing">Ongoing practice</option></select></label>
           <label className="block sm:col-span-2"><span className="field-label">Subject or industry</span><input className="field" value={industry} onChange={(event) => setIndustry(event.target.value)} placeholder="e.g. Computer science, finance, biology" maxLength={80} /></label>
           <label className="block sm:col-span-2"><span className="field-label">What are you hoping to learn or teach?</span><textarea className="field min-h-28 resize-y" value={about} onChange={(event) => setAbout(event.target.value)} placeholder="A short note is enough for now." maxLength={2000} /></label>
-          <div className="sm:col-span-2"><button className="button-primary w-full sm:w-auto" type="submit" disabled={busy}>{busy ? 'Saving profile…' : 'Begin the journey →'}</button></div>
+          <div className="sm:col-span-2"><p className="mb-3 text-xs text-ink-muted">Your learning preferences are saved on this device for now. You can change them from your profile.</p><button className="button-primary w-full sm:w-auto" type="submit" disabled={busy}>{busy ? 'Saving profile…' : 'Begin the journey →'}</button></div>
         </form>
         </div>
       </section>
     </main>
   )
+}
+
+function ChoiceCard({ name, value, checked, onChange, label, description }: { name: string; value: string; checked: boolean; onChange: () => void; label: string; description: string }) {
+  return <label className={`cursor-pointer rounded-lg border p-4 transition ${checked ? 'border-secondary bg-secondary/10 shadow-[0_0_0_1px_rgba(67,217,196,.18)]' : 'border-white/10 bg-surface-high hover:border-white/20'}`}><input className="sr-only" type="radio" name={name} value={value} checked={checked} onChange={onChange} /><span className="font-bold text-ink">{label}</span><span className="mt-1 block text-sm text-ink-muted">{description}</span></label>
 }
