@@ -53,14 +53,24 @@ export function ServerHub({ user, onSignOut }: ServerHubProps) {
 
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-          <div><p className="eyebrow">Welcome, {user.display_name}</p><h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">Choose your next learning world.</h1><p className="mt-3 text-ink-muted">Create one from course material or join your team with a code.</p></div>
+          <div><p className="eyebrow">Welcome, {user.display_name}</p><h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">Choose what to do next.</h1><p className="mt-3 max-w-2xl text-ink-muted">No mode lock-in. Start a challenge, create a world, join a server, or return to work already in progress.</p></div>
           <button className="button-secondary" type="button" onClick={() => void loadServers()} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh servers'}</button>
         </div>
 
         {error && <div className="mt-6 rounded-xl border border-error/25 bg-error/8 p-4 text-sm text-error" role="alert">{error}</div>}
 
+        <section className="mt-6" aria-labelledby="hub-actions-title">
+          <h2 id="hub-actions-title" className="sr-only">Universal server actions</h2>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <DashboardAction href="/demo" title="Start a challenge" description="Try the offline demo; no server is created yet." primary />
+            <DashboardAction title="Create a server" description="Use notes, lectures, or files." onClick={() => setTab('create')} />
+            <DashboardAction title="Join a server" description="Enter a code and learn together." onClick={() => setTab('join')} />
+            <DashboardAction href="#my-servers" title="My servers" description="Open any world you already joined." />
+          </div>
+        </section>
+
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(22rem,0.85fr)]">
-          <section className="cq-panel p-5 sm:p-7">
+          <section id="my-servers" className="cq-panel scroll-mt-6 p-5 sm:p-7">
             <div className="flex rounded-xl bg-background/45 p-1" role="tablist" aria-label="Server actions">
               <TabButton active={tab === 'create'} onClick={() => setTab('create')}>Create a server</TabButton>
               <TabButton active={tab === 'join'} onClick={() => setTab('join')}>Join with code</TabButton>
@@ -82,6 +92,12 @@ export function ServerHub({ user, onSignOut }: ServerHubProps) {
 
 function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: string }) {
   return <button type="button" role="tab" aria-selected={active} onClick={onClick} className={`flex-1 rounded-lg px-4 py-3 text-sm font-extrabold transition ${active ? 'bg-surface-highest text-ink shadow' : 'text-ink-muted hover:text-ink'}`}>{children}</button>
+}
+
+function DashboardAction({ title, description, href, onClick, primary = false }: { title: string; description: string; href?: string; onClick?: () => void; primary?: boolean }) {
+  const className = `group flex min-h-28 flex-col justify-between rounded-xl border p-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-offset-2 focus-visible:ring-offset-background ${primary ? 'border-primary bg-primary text-[#1a1204] shadow-lg shadow-primary/10 hover:bg-primary-soft' : 'border-white/10 bg-surface-high hover:border-secondary/50 hover:bg-surface-highest'}`
+  const content = <><span className={`text-base font-black ${primary ? 'text-[#1a1204]' : 'text-ink'}`}>{title}</span><span className={`mt-3 text-xs leading-5 ${primary ? 'text-[#3b2b0f]' : 'text-ink-muted'}`}>{description}</span></>
+  return href ? <a className={className} href={href}>{content}</a> : <button className={className} type="button" onClick={onClick}>{content}</button>
 }
 
 function CreateServerForm({ onCreated }: { onCreated: (server: ServerSummary) => void }) {
