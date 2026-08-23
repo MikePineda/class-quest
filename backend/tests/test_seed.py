@@ -2,6 +2,8 @@
 server that plays end to end through the API."""
 import json
 
+import pytest
+
 from app import models
 from app.config import get_settings
 from app.db import Base, SessionLocal, engine
@@ -34,11 +36,53 @@ def test_ensure_demo_server_is_idempotent():
     seed.ensure_demo_server()
     db = SessionLocal()
     try:
+        # One account owning both hand-written servers, one world each.
         assert db.query(models.User).filter_by(email=seed.DEMO_EMAIL).count() == 1
         assert db.query(models.Server).filter_by(join_code=seed.DEMO_JOIN_CODE).count() == 1
-        assert db.query(models.World).count() == 1
+        assert db.query(models.Server).filter_by(join_code=seed.PY_JOIN_CODE).count() == 1
+        assert db.query(models.World).count() == 2
     finally:
         db.close()
+
+
+def test_the_python_server_is_seeded_and_walkable():
+    seed.ensure_demo_server()
+    db = SessionLocal()
+    try:
+        server = db.query(models.Server).filter_by(join_code=seed.PY_JOIN_CODE).one()
+        assert server.status == "ready" and server.is_public
+        world = db.query(models.World).filter_by(server_id=server.id).one()
+        assert world.status == "ready"
+        # All three artifacts, or the hub renders a world with sealed gates.
+        assert world.graph_id == seed.PY_GRAPH_ID
+        assert world.quest_id == seed.PY_QUEST_ID
+        assert world.gauntlet_id == seed.PY_GAUNTLET_ID
+        assert json.loads(world.quest_json)["graph_id"] == json.loads(world.graph_json)["graph_id"]
+        assert db.query(models.Segment).filter_by(server_id=server.id).count() == 12
+    finally:
+        db.close()
+
+
+def test_an_existing_demo_user_does_not_block_a_new_server():
+    # The marker is the join code, not the demo account: in production that
+    # account already exists, so hanging a second server off it would mean the
+    # second server never appeared.
+    seed._ensure_server(seed.DEMO_SPEC)
+    seed._ensure_server(seed.PY_SPEC)
+    db = SessionLocal()
+    try:
+        assert db.query(models.User).filter_by(email=seed.DEMO_EMAIL).count() == 1
+        assert db.query(models.Server).count() == 2
+    finally:
+        db.close()
+
+
+@pytest.mark.parametrize("bundle", ["overfitting", "pybasics"])
+def test_every_seeded_bundle_validates(bundle):
+    content = fixtures.load_bundle(bundle)
+    assert validators.validate_graph(content.graph, content.segments) == []
+    assert validators.validate_game(content.quest, content.graph) == []
+    assert validators.validate_game(content.gauntlet, content.graph) == []
 
 
 def test_demo_login_works_through_the_api(client):
