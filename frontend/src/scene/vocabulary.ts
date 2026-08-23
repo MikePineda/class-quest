@@ -138,6 +138,37 @@ export function propArt(p: Prop): PropArt {
   return PROPS[p]
 }
 
+// --- the player's kit -------------------------------------------------------
+//
+// Deliberately NOT part of the `actor` enum, and not a `prop`. What the hero
+// carries is a client-side idea about the hero; `schema/game.schema.json` is
+// the law and has nothing to say about it, exactly as it has nothing to say
+// about portals.
+//
+// The explorer sheet is drawn empty-handed: the pack ships hands and weapons
+// as separate layers to be composited per animation frame, and we do not have
+// the rig offsets that would place them. At 16px that reads as a hero with no
+// hands at all, which is what this fixes.
+//
+// One still, anchored to the bottom centre of the actor's frame -- the one
+// point the 32px idle sheet and the 64px run sheet agree on, so it rides every
+// frame of both. `GEAR_OFFSET` is measured from that anchor: `x` is the left
+// edge of the sword relative to the frame's centre, `y` how far its bottom
+// sits above the actor's feet. Mirrored with the actor when it faces left.
+
+export interface PlayerGear {
+  sprite: Still
+  offset: { x: number; y: number }
+}
+
+export const PLAYER_GEAR: PlayerGear = {
+  sprite: still('/sprites/gear/short_sword.png', 16, 16),
+  // Two pixels off the floor puts the guard at the hip and the blade along the
+  // ribs. Flush with the floor and it hangs off his ankle; four and the tip is
+  // through his scarf.
+  offset: { x: -3, y: 2 },
+}
+
 // --- portals ----------------------------------------------------------------
 // Deliberately NOT part of the `Prop` enum. A portal is a client-side idea about
 // how a world is navigated; `schema/game.schema.json` is the law and has no

@@ -12,8 +12,11 @@ Pack: Pixel Crawler (Free) by Anokolisa — https://anokolisa.itch.io/free-pixel
 Its Terms.txt permits use and modification in any project and forbids only
 reselling the art. See docs/ATTRIBUTION.md.
 
-`mentor_owl` and `signpost` are drawn here in code, not cut from the pack: the
-owl is the mascot and has to be ours, and the pack has no signpost.
+`mentor_owl`, `signpost` and the player's `short_sword` are drawn here in code
+rather than cut from the pack: the owl is the mascot and has to be ours, the
+pack has no signpost, and the pack's weapons are drawn for a character roughly
+twice this one's size -- its shortest sword is as tall as the explorer, so laid
+against him it covers his head. See SHORT_SWORD below.
 """
 
 import json
@@ -81,6 +84,16 @@ PALETTE = {
     "y": (217, 119, 6, 255),      # beak / feet
     "w": (94, 62, 36, 255),       # post wood
     "W": (140, 96, 56, 255),      # sign board
+    # Sword. Every colour below the blade is one the explorer sheet already
+    # uses, sampled from it, so the weapon reads as part of the character
+    # rather than as something pasted on top of him.
+    "n": (20, 20, 18, 255),       # the sheet's own outline black
+    "s": (214, 222, 238, 255),    # blade highlight
+    "S": (140, 152, 178, 255),    # blade shade
+    "t": (181, 108, 48, 255),     # the sheet's leather trim -- guard, pommel
+    "T": (240, 154, 83, 255),     # its highlight
+    "l": (71, 40, 13, 255),       # the sheet's dark leather -- grip
+    "g": (55, 58, 32, 255),       # the sheet's garment shadow -- glove
 }
 
 MENTOR_OWL = [
@@ -118,6 +131,36 @@ SIGNPOST = [
     "......kwwk......",
     "......kwwk......",
     ".....kkwwkk.....",
+    "................",
+]
+
+
+#: The explorer carries nothing: the pack ships hands and weapons as separate
+#: layers meant to be composited per animation frame, and we do not have the
+#: rig offsets that would place them. So he is drawn empty-handed, and at 16px
+#: that reads as a hero with no hands at all.
+#:
+#: This is the smallest fix that is honest about it: a short sword at his hip,
+#: with a gloved fist closed on the grip. It is one still, anchored to the
+#: bottom centre of the frame -- the one point both the 32px idle sheet and the
+#: 64px run sheet agree on -- so it rides every frame of both without needing
+#: per-frame offsets. It does not swing, because nothing in this game swings.
+SHORT_SWORD = [
+    "................",
+    "................",
+    "................",
+    "......n.........",
+    "......nsn.......",
+    "......nsSn......",
+    "......nsSn......",
+    "......nsSn......",
+    "......nsSn......",
+    ".....nTttTn.....",
+    ".....ngggn......",
+    ".....ngggn......",
+    "......nln.......",
+    "......ntn.......",
+    ".......n........",
     "................",
 ]
 
@@ -164,11 +207,21 @@ def main(pack_dir):
                 "from": f"Entities/Npc's/{folder}/{sub}",
             }
 
-    for name, rows in (("actors/mentor_owl_idle.png", MENTOR_OWL), ("props/signpost.png", SIGNPOST)):
-        img = draw(rows)
+    # (destination, rows, frame size). The sword is not padded out to 32:
+    # it is a still laid over an actor, not an actor, so it is exactly its own
+    # size and carries no frame count.
+    for name, rows, size in (
+        ("actors/mentor_owl_idle.png", MENTOR_OWL, 32),
+        ("props/signpost.png", SIGNPOST, 32),
+        ("gear/short_sword.png", SHORT_SWORD, 16),
+    ):
+        img = draw(rows, size)
         (OUT / name).parent.mkdir(parents=True, exist_ok=True)
         img.save(OUT / name)
-        manifest[name] = {"w": 32, "h": 32, "frame": 32, "frames": 1, "from": "drawn in scripts/slice_sprites.py"}
+        entry = {"w": size, "h": size, "from": "drawn in scripts/slice_sprites.py"}
+        if size == 32:
+            entry |= {"frame": 32, "frames": 1}
+        manifest[name] = entry
 
     (OUT / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
     print(f"wrote {len(manifest)} sprites to {OUT}")
