@@ -14,13 +14,13 @@ describe('learning preferences', () => {
 
   it('defaults safely and round-trips non-sensitive preferences', () => {
     expect(loadLearningPreferences('user-1')).toEqual(DEFAULT_LEARNING_PREFERENCES)
-    const preferences = { mode: 'async_group' as const, goal: 'review' as const, sessionLength: 'quick' as const }
+    const preferences = { goal: 'review' as const, sessionLength: 'quick' as const }
     saveLearningPreferences('user-1', preferences)
     expect(loadLearningPreferences('user-1')).toEqual(preferences)
   })
 
   it('rejects malformed stored values', () => {
-    window.localStorage.setItem('classquest.learning-preferences.user-1', JSON.stringify({ mode: 'unknown' }))
+    window.localStorage.setItem('classquest.learning-preferences.user-1', JSON.stringify({ goal: 'unknown' }))
     expect(loadLearningPreferences('user-1')).toEqual(DEFAULT_LEARNING_PREFERENCES)
   })
 })
