@@ -63,6 +63,9 @@ Naming (Minecraft analogy): a **Server** is a class/course (name, join code, pub
 | GET | `/worlds/{id}/progress` | yes | — | `ProgressOut` |
 | POST | `/worlds/{id}/explain` | yes | `ExplainIn` | `ExplainOut` · `503` grader down |
 | POST | `/worlds/{id}/explain/turn` | yes | `ExplainChatIn` | `ExplainChatOut` · `503` grader down |
+| POST | `/demo/explain/turn` | **no** | `DemoExplainChatIn` | `ExplainChatOut` (awards nothing) · `429` |
+
+Every write endpoint is rate limited. A refusal is `429` with a `Retry-After` header in seconds — surface it as "try again in N seconds", never as a generic failure. The limits are sized so a full classroom behind one NAT never sees one: registering, signing in and joining are per address and loose; creating a course and grading an explanation are per **account**; the public demo chat is per address *and* under a global ceiling.
 
 ### `GET /health`
 ```json
@@ -383,6 +386,19 @@ The learner explains, an AI *student* asks follow-ups until it understands, and 
 - `question` is `null` exactly when `done` is `true`. `targeted_misconception_id` is set when the question is aimed at a known misconception, so you can highlight it.
 - **Nothing is written until `done`.** Abandoning a chat stores nothing and earns nothing. On the final turn the server writes one explanation (the rendered transcript) plus one attempt and returns `result` — same XP rules as `/explain`: 25 pass / 10 partial, first pass or partial per concept per world only, later conversations return `xp_awarded: 0`.
 - `409` if the world is not ready, `404` for an unknown `concept_id`, `503` if the grader is unavailable (live-model path only; the fixture student never fails) — offer retry, which re-posts the identical body.
+
+### `POST /demo/explain/turn` (no auth)
+
+The Socratic chat for the world bundled into the page — the signed-out visitor walking the fixture world from the login screen. Same request and same response as `/worlds/{id}/explain/turn`, plus a `bundle` naming which hand-written world the concept belongs to.
+
+```json
+// request
+{ "bundle": "pybasics", "concept_id": "variables", "turns": [ { "role": "learner", "text": "A variable is a name bound to a value." } ] }
+```
+
+- `bundle` is `"pybasics"` or `"overfitting"` (`422` otherwise). The concept itself is **loaded on the server** from `fixtures/` — only the id travels, so this endpoint cannot be pointed at content of the caller's choosing.
+- **Nothing is written and nothing is awarded.** `result.xp_awarded`, `result.world_xp` and `result.server_xp` are always `0`: there is no account to credit. Keep demo XP client-side, exactly as the bundled quiz already does.
+- `404` for a concept the bundle does not contain, `429` when the demo is over its limit. There is no `503`: this path falls back to the deterministic student rather than failing.
 
 ## Content contract (what you render)
 

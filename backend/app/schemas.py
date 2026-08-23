@@ -496,6 +496,20 @@ class ExplainChatIn(BaseModel):
         return v
 
 
+class DemoExplainChatIn(ExplainChatIn):
+    """The same conversation, against a world that has no server behind it.
+
+    `bundle` names one of the hand-written worlds in `fixtures/`, and that is
+    the whole of the caller's influence over what the model is asked about: the
+    concept is looked up on this box, never posted. See `routers/demo.py`.
+    """
+    bundle: Literal["overfitting", "pybasics"]
+    model_config = ConfigDict(json_schema_extra={"example": {
+        "bundle": "pybasics",
+        "concept_id": ExplainChatIn.model_config["json_schema_extra"]["example"]["concept_id"],
+        "turns": ExplainChatIn.model_config["json_schema_extra"]["example"]["turns"]}})
+
+
 class ExplainChatOut(BaseModel):
     """`question` is what the AI student says next (null once it is done);
     `result` is the graded ExplainOut, present only on the final turn — that is
