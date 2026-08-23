@@ -163,10 +163,13 @@ export interface PlayerGear {
 
 export const PLAYER_GEAR: PlayerGear = {
   sprite: still('/sprites/gear/short_sword.png', 16, 16),
-  // Two pixels off the floor puts the guard at the hip and the blade along the
-  // ribs. Flush with the floor and it hangs off his ankle; four and the tip is
-  // through his scarf.
-  offset: { x: -3, y: 2 },
+  // Carried, not slung: the blade rides up past the shoulder with the guard at
+  // rib height, on the far side of the body from its centre. The body spans
+  // -9..+9 either side of the anchor and this lands the blade at +6..+11, which
+  // is the part that matters -- under about +5 it crosses the midline and hangs
+  // between his legs, which is where it used to be. `y` is what picks the
+  // carry: drop it toward 2 and the sword slides down his leg to the ankle.
+  offset: { x: 1, y: 9 },
 }
 
 // --- portals ----------------------------------------------------------------

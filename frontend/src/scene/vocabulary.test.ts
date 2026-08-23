@@ -142,11 +142,12 @@ describe('the special cases', () => {
     expect(entry.frames).toBeUndefined()
   })
 
-  it('holds the sword off the floor and to one side', () => {
-    // Flush with the floor it hangs off his ankle; too high and the tip goes
-    // through his scarf. The numbers are the ones that were eyeballed against
-    // every frame of both sheets, so a change to them is a change to be looked at.
-    expect(PLAYER_GEAR.offset).toEqual({ x: -3, y: 2 })
+  it('seats the sword in his hand, not on the midline', () => {
+    // The body is 19px wide around the anchor, so anything under x=+5 puts the
+    // blade between his legs. The numbers were eyeballed against every frame of
+    // both sheets, so a change to them is a change to be looked at.
+    expect(PLAYER_GEAR.offset).toEqual({ x: 1, y: 9 })
+    expect(PLAYER_GEAR.offset.x).toBeGreaterThan(0)
   })
 
   it('draws chart_frame in code and everything else as a sprite', () => {
