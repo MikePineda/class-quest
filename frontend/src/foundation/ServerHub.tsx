@@ -4,8 +4,6 @@ import type { ServerSummary, User } from '../api/types'
 import { readableError } from './errors'
 import { Brand } from './Brand'
 import { CohortStatusCard } from './CohortStatusCard'
-import { loadLearningPreferences } from './learningPreferences'
-import { PersonalizedStartCard } from './PersonalizedStartCard'
 
 interface ServerHubProps {
   user: User
@@ -17,8 +15,6 @@ export function ServerHub({ user, onSignOut }: ServerHubProps) {
   const [tab, setTab] = useState<'create' | 'join'>('create')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const preferences = loadLearningPreferences(user.id)
-
   const loadServers = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -62,8 +58,6 @@ export function ServerHub({ user, onSignOut }: ServerHubProps) {
         </div>
 
         {error && <div className="mt-6 rounded-xl border border-error/25 bg-error/8 p-4 text-sm text-error" role="alert">{error}</div>}
-
-        <PersonalizedStartCard role={user.role ?? 'student'} mode={preferences.mode} onCreateServer={() => setTab('create')} onJoinServer={() => setTab('join')} />
 
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(22rem,0.85fr)]">
           <section className="cq-panel p-5 sm:p-7">
