@@ -4,6 +4,7 @@ startup -- any problem here is logged, not raised.
 """
 import json
 import logging
+from dataclasses import dataclass
 
 from app import models
 from app.config import get_settings
@@ -21,44 +22,101 @@ DEMO_GRAPH_ID = "wk3ml0a1"
 DEMO_QUEST_ID = "q7kp2wm4"
 DEMO_GAUNTLET_ID = "g3xn8vr1"
 
+PY_JOIN_CODE = "PY101A"
+PY_GRAPH_ID = "pyb1as1c"
+PY_QUEST_ID = "pyq1w4k7"
+PY_GAUNTLET_ID = "pyg2m8t5"
+
+
+@dataclass(frozen=True)
+class ServerSpec:
+    """One seeded server. `join_code` doubles as the idempotency marker: the
+    demo *user* cannot serve as one for a second server, because in production
+    that user already exists and the check would skip forever."""
+
+    bundle: str
+    join_code: str
+    name: str
+    blurb: str
+    world_title: str
+    graph_id: str
+    quest_id: str
+    gauntlet_id: str
+
+
+DEMO_SPEC = ServerSpec(
+    bundle="overfitting",
+    join_code=DEMO_JOIN_CODE,
+    name="Demo: Intro to ML — Week 3",
+    blurb="Training data, generalisation and overfitting.",
+    world_title="Week 3",
+    graph_id=DEMO_GRAPH_ID,
+    quest_id=DEMO_QUEST_ID,
+    gauntlet_id=DEMO_GAUNTLET_ID,
+)
+
+PY_SPEC = ServerSpec(
+    bundle="pybasics",
+    join_code=PY_JOIN_CODE,
+    name="Demo: Programming Fundamentals — Week 1",
+    blurb="Variables, types, printing, lists and loops.",
+    world_title="Week 1",
+    graph_id=PY_GRAPH_ID,
+    quest_id=PY_QUEST_ID,
+    gauntlet_id=PY_GAUNTLET_ID,
+)
+
 
 def ensure_demo_server() -> None:
-    try:
-        _ensure_demo_server()
-    except Exception:
-        log.exception("seed: failed to create demo server")
+    """Both hand-written servers, owned by the demo account."""
+    for spec in (DEMO_SPEC, PY_SPEC):
+        try:
+            _ensure_server(spec)
+        except Exception:
+            log.exception("seed: failed to create %s", spec.join_code)
 
 
-def _ensure_demo_server() -> None:
+def _demo_user(db, now: str) -> models.User:
+    """The demo account, created on first need. In production it already
+    exists, which is exactly why it cannot be a seeding marker."""
+    user = db.query(models.User).filter_by(email=DEMO_EMAIL).one_or_none()
+    if user is not None:
+        return user
+    user = models.User(
+        id=new_id(), email=DEMO_EMAIL, password_hash=hash_password(DEMO_PASSWORD),
+        display_name="Demo Learner", role="student", created_at=now,
+    )
+    db.add(user)
+    db.flush()
+    return user
+
+
+def _ensure_server(spec: ServerSpec) -> None:
     with session_scope() as db:
-        existing = db.query(models.User.id).filter_by(email=DEMO_EMAIL).first()
+        existing = db.query(models.Server.id).filter_by(join_code=spec.join_code).first()
         if existing is not None:
-            log.info("seed: demo user already exists, skipping")
+            log.info("seed: %s already exists, skipping", spec.join_code)
             return
 
-        content = fixtures.load_demo()
+        content = fixtures.load_bundle(spec.bundle)
+        source = fixtures.BUNDLES[spec.bundle].source
 
         graph_errors = validators.validate_graph(content.graph, content.segments)
         if graph_errors:
-            log.error("seed: demo graph failed validation: %s", graph_errors)
+            log.error("seed: %s graph failed validation: %s", spec.bundle, graph_errors)
         quest_errors = validators.validate_game(content.quest, content.graph)
         if quest_errors:
-            log.error("seed: demo quest failed validation: %s", quest_errors)
+            log.error("seed: %s quest failed validation: %s", spec.bundle, quest_errors)
         gauntlet_errors = validators.validate_game(content.gauntlet, content.graph)
         if gauntlet_errors:
-            log.error("seed: demo gauntlet failed validation: %s", gauntlet_errors)
+            log.error("seed: %s gauntlet failed validation: %s", spec.bundle, gauntlet_errors)
 
         now = utc_now_iso()
-        user = models.User(
-            id=new_id(), email=DEMO_EMAIL, password_hash=hash_password(DEMO_PASSWORD),
-            display_name="Demo Learner", role="student", created_at=now,
-        )
-        db.add(user)
-        db.flush()
+        user = _demo_user(db, now)
 
         server = models.Server(
-            id=new_id(), name="Demo: Intro to ML — Week 3", description=None,
-            join_code=DEMO_JOIN_CODE, is_public=True, pet="owl", owner_id=user.id,
+            id=new_id(), name=spec.name, description=None,
+            join_code=spec.join_code, is_public=True, pet="owl", owner_id=user.id,
             status="ready", error=None, segment_count=len(content.segments), created_at=now,
         )
         db.add(server)
@@ -69,7 +127,7 @@ def _ensure_demo_server() -> None:
         ))
 
         document = models.Document(
-            id=new_id(), server_id=server.id, filename="demo_lecture.txt",
+            id=new_id(), server_id=server.id, filename=source,
             content_type="text/plain", char_count=sum(len(s) for s in content.segments),
             stored_path=None, created_at=now,
         )
@@ -82,11 +140,12 @@ def _ensure_demo_server() -> None:
             ))
 
         world = models.World(
-            id=new_id(), server_id=server.id, idx=0, title=content.quest.get("title", "Week 3"),
-            blurb="Training data, generalisation and overfitting.",
+            id=new_id(), server_id=server.id, idx=0,
+            title=content.quest.get("title", spec.world_title),
+            blurb=spec.blurb,
             segment_start=0, segment_end=len(content.segments) - 1, status="ready",
             stage="done", error=None,
-            graph_id=DEMO_GRAPH_ID, quest_id=DEMO_QUEST_ID, gauntlet_id=DEMO_GAUNTLET_ID,
+            graph_id=spec.graph_id, quest_id=spec.quest_id, gauntlet_id=spec.gauntlet_id,
             graph_json=json.dumps(content.graph), quest_json=json.dumps(content.quest),
             gauntlet_json=json.dumps(content.gauntlet), created_at=now,
         )
@@ -98,7 +157,7 @@ def _ensure_demo_server() -> None:
             message="Demo world seeded", created_at=now,
         ))
 
-        log.info("seed: created demo user/server/world")
+        log.info("seed: created server %s with world %s", spec.join_code, world.id)
 
 
 # ------------------------------------------------------------------ cohort
@@ -161,10 +220,23 @@ _ANSWER_PATTERN: tuple[tuple[tuple[int, ...], tuple[int, ...]], ...] = (
 
 
 def ensure_demo_cohort() -> None:
-    try:
-        _ensure_demo_cohort()
-    except Exception:
-        log.exception("seed: failed to create demo cohort")
+    """Populate every seeded classroom, or just the one the env var names.
+
+    Both hand-written servers get a class, so whichever one the pitch opens
+    has a leaderboard with a spread rather than a single lonely row.
+    """
+    configured = get_settings().demo_cohort_server_id.strip()
+    if configured:
+        try:
+            _ensure_demo_cohort(configured)
+        except Exception:
+            log.exception("seed: failed to create demo cohort")
+        return
+    for spec in (DEMO_SPEC, PY_SPEC):
+        try:
+            _ensure_demo_cohort("", join_code=spec.join_code)
+        except Exception:
+            log.exception("seed: failed to create cohort for %s", spec.join_code)
 
 
 def _prediction_scenes(game_json: str | None) -> list[dict]:
@@ -252,8 +324,9 @@ def _blind_spot(scenes: list[dict]) -> int | None:
     return max(range(len(scenes)), key=rank)
 
 
-def _target_server(db, server_id: str) -> models.Server | None:
-    """The configured server, or the seeded demo one. A bad id is a warning."""
+def _target_server(db, server_id: str, join_code: str = DEMO_JOIN_CODE) -> models.Server | None:
+    """The configured server, or the seeded one with this join code. A bad id
+    is a warning, never a crash: the cohort is a garnish."""
     if server_id:
         server = db.get(models.Server, server_id)
         if server is None:
@@ -266,16 +339,15 @@ def _target_server(db, server_id: str) -> models.Server | None:
             )
             return None
         return server
-    server = db.query(models.Server).filter_by(join_code=DEMO_JOIN_CODE).one_or_none()
+    server = db.query(models.Server).filter_by(join_code=join_code).one_or_none()
     if server is None:
-        log.warning("seed: no demo server, skipping cohort")
+        log.warning("seed: no server with join code %s, skipping cohort", join_code)
     return server
 
 
-def _ensure_demo_cohort() -> None:
-    settings = get_settings()
+def _ensure_demo_cohort(server_id: str, join_code: str = DEMO_JOIN_CODE) -> None:
     with session_scope() as db:
-        server = _target_server(db, settings.demo_cohort_server_id.strip())
+        server = _target_server(db, server_id, join_code)
         if server is None:
             return
 
