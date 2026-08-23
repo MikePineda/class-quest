@@ -19,6 +19,9 @@ export type { CohortEchoProps } from './CohortEcho'
 export { WorldClosurePanel } from './WorldClosurePanel'
 export type { WorldClosurePanelProps } from './WorldClosurePanel'
 
+export { CohortChallenge } from './CohortChallengePanel'
+export type { CohortChallengeProps } from './CohortChallengePanel'
+
 export { CACHE_MS, useCohort } from './useCohort'
 export type { CohortState } from './useCohort'
 
@@ -30,6 +33,8 @@ export {
   masterySummary,
   sceneEcho,
 } from './cohortStats'
+export { challengeHasEnoughEvidence, selectCohortChallenge } from './challenge'
+export type { CohortChallenge as CohortChallengeData } from './challenge'
 export type {
   BoardRow,
   ClassSnapshot,
