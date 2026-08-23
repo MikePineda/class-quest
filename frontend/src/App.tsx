@@ -10,41 +10,14 @@ import { WorldExperience } from './scene/WorldExperience'
 
 type Screen = 'profile' | 'servers'
 
-/** DEV ONLY — fake user for previewing screens without a backend. */
-const DEV_MOCK_USER: User = {
-  id: 'dev-mock-001',
-  email: 'demo@classquest.app',
-  display_name: 'Demo Explorer',
-  role: 'student',
-  industry: 'Computer Science',
-  about: 'Just exploring the UI!',
-  created_at: new Date().toISOString(),
-}
-
 export default function App() {
   if (window.location.pathname === '/demo') return <DemoExperience />
 
-  // DEV ONLY: ?screen=profile or ?screen=servers to bypass auth
-  const devScreen = new URLSearchParams(window.location.search).get('screen') as Screen | null
-  if (devScreen === 'profile' || devScreen === 'servers') {
-    return <DevPreview initialScreen={devScreen} />
-  }
   // `/world/<id>` walks a real generated world; bare `/world` walks the fixture.
   const world = window.location.pathname.match(/^\/world(?:\/([^/]+))?\/?$/)
   if (world) return <WorldExperience worldId={world[1] ? decodeURIComponent(world[1]) : undefined} />
 
   return <FoundationApp />
-}
-
-/** DEV ONLY — renders screens with a mock user, no backend needed. */
-function DevPreview({ initialScreen }: { initialScreen: Screen }) {
-  const [user, setUser] = useState<User>(DEV_MOCK_USER)
-  const [screen, setScreen] = useState<Screen>(initialScreen)
-
-  if (screen === 'profile') {
-    return <ProfileScreen user={user} onSaved={(updated) => { setUser(updated); setScreen('servers') }} onSignOut={() => { window.location.search = '' }} />
-  }
-  return <ServerHub user={user} onEditProfile={() => setScreen('profile')} onSignOut={() => { window.location.search = '' }} />
 }
 
 function FoundationApp() {
