@@ -53,6 +53,7 @@ import { buildHub } from './hubgen'
 import type { HubPortalSpec } from './hubgen'
 import { conceptTrail, diagnose } from './pedagogy'
 import { ExplainPanel } from './ExplainPanel'
+import type { ExplainTarget } from './ExplainPanel'
 import { QuizPanel } from './QuizPanel'
 import { StorybookPanel } from './StorybookPanel'
 import {
@@ -67,7 +68,7 @@ import type { Persistence, SceneOutcome, Stage } from './SceneStages'
 import type { Point, PortalKind, PortalNode, Rect, WorldMap } from './types'
 import { BackLink } from '../nav/BackLink'
 import { navigate } from '../nav/router'
-import { FIXTURE_HREF, hrefFor } from '../nav/routes'
+import { DEFAULT_FIXTURE, FIXTURE_HREF, hrefFor } from '../nav/routes'
 import type { FixtureBundle } from '../nav/routes'
 import { TouchControls } from './TouchControls'
 import { useCoarsePointer } from './useCoarsePointer'
@@ -240,6 +241,21 @@ export function WorldExperience({ worldId, bundle }: WorldExperienceProps) {
   const session = stored.key === worldId ? stored : freshSession(worldId)
   const { completed, correct, explained, read, xp } = session
   const [openPortal, setOpenPortal] = useState<PortalKind | null>(null)
+
+  /**
+   * Which endpoint the Explain gate grades against.
+   *
+   * `DEFAULT_FIXTURE` is unreachable in practice — a component with neither a
+   * world id nor a bundle renders nothing — but naming a bundle here rather
+   * than asserting keeps the union total, which is the whole reason it is one.
+   */
+  const explainTarget: ExplainTarget = useMemo(
+    () =>
+      worldId
+        ? { kind: 'world', worldId }
+        : { kind: 'demo', bundle: bundle ?? DEFAULT_FIXTURE },
+    [worldId, bundle],
+  )
   /** Bumped by "Try again": re-runs the fetch without discarding history. */
   const [attempt, setAttempt] = useState(0)
 
@@ -610,11 +626,15 @@ export function WorldExperience({ worldId, bundle }: WorldExperienceProps) {
   const onExplained = useCallback(
     (result: ExplainOut) => {
       updateSession((current) => ({
-        xp: result.world_xp,
+        // The bundled world grades against `/demo/explain/turn`, which writes
+        // no row and therefore answers zero for every XP field. Taking it would
+        // wipe whatever the run had. There is nothing to take: demo XP is the
+        // session's, exactly as it already is for the quiz gate.
+        xp: worldId ? result.world_xp : current.xp,
         explained: new Set([...current.explained, result.concept.id]),
       }))
     },
-    [updateSession],
+    [updateSession, worldId],
   )
 
   /**
@@ -939,7 +959,7 @@ export function WorldExperience({ worldId, bundle }: WorldExperienceProps) {
           />
         ) : openNode.kind === 'explain' && graph ? (
           <ExplainPanel
-            worldId={worldId ?? null}
+            target={explainTarget}
             graph={graph}
             explained={explained}
             onCleared={onExplained}

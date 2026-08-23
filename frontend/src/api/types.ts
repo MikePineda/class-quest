@@ -370,6 +370,23 @@ export interface ExplainChatIn {
 }
 
 /**
+ * The same conversation against a world compiled into the page rather than
+ * fetched — the signed-out visitor's demo. `bundle` names which hand-written
+ * world the concept belongs to; the server looks the concept itself up, so the
+ * request carries an id and nothing else about the content.
+ *
+ * The reply is an ordinary `ExplainChatOut` whose `result`, when it arrives,
+ * always reads `xp_awarded: 0` / `world_xp: 0` / `server_xp: 0`. There is no
+ * account behind it to credit, so demo XP stays client-side.
+ */
+export interface DemoExplainChatIn extends ExplainChatIn {
+  bundle: FixtureBundleName
+}
+
+/** The bundles `/demo/*` will answer for. Mirrors `nav/routes.ts`. */
+export type FixtureBundleName = 'pybasics' | 'overfitting'
+
+/**
  * `question` is what the AI student says next, null once it is done.
  * `result` is the graded outcome, non-null exactly when `done` — that final
  * turn is the only one that writes anything or awards XP.
