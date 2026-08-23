@@ -46,6 +46,33 @@ def test_register_duplicate_email_is_409(client):
 
 def test_register_short_password_is_422(client):
     assert _register(client, password="1234567").status_code == 422
+    assert _register(client, password="nine char").status_code == 422
+
+
+def test_register_applies_the_password_policy_not_just_a_length(client):
+    # The rules themselves are tested in test_passwords.py; this is about the
+    # router actually running them, and running them with the other fields in
+    # hand -- "do not use your own name" cannot be a field validator.
+    common = _register(client, password="password123")
+    assert common.status_code == 422
+    assert "commonly used" in common.text
+
+    own_name = _register(client, email="lovelace@example.com", password="lovelace rocket")
+    assert own_name.status_code == 422
+    assert "name or email" in own_name.text
+
+
+def test_register_accepts_a_long_lowercase_passphrase(client):
+    # No composition rule, on purpose: demanding a symbol produces Password1!
+    assert _register(client, password="thistle marmalade rowboat").status_code == 201
+
+
+def test_login_is_not_held_to_the_registration_policy(client):
+    # Tightening login would lock out every account created before the policy,
+    # and a malformed login is simply "invalid credentials" either way.
+    assert _register(client).status_code == 201
+    r = client.post("/auth/login", json={"email": REG["email"], "password": "x"})
+    assert r.status_code == 401
 
 
 def test_register_bad_email_is_422(client):

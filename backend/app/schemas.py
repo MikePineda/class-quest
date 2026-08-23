@@ -3,9 +3,10 @@ reads in /docs, so keep them realistic."""
 import re
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app import contracts
+from app.services.passwords import MAX_BYTES, MIN_LENGTH, password_problems
 
 
 class HealthOut(BaseModel):
@@ -32,7 +33,11 @@ def _normalize_email(v: str) -> str:
 
 class RegisterIn(BaseModel):
     email: str
-    password: str = Field(min_length=8, max_length=128)
+    # The real rules live in `services/passwords.py` and run in the model
+    # validator below, which needs the email and the name alongside the
+    # password. These bounds are here so the constraint shows up in
+    # /openapi.json and so an absurd payload is rejected before bcrypt sees it.
+    password: str = Field(min_length=MIN_LENGTH, max_length=MAX_BYTES)
     display_name: str = Field(min_length=1, max_length=80)
     model_config = ConfigDict(json_schema_extra={"example": {
         "email": "ada@example.com", "password": "correct-horse-battery",
@@ -50,6 +55,18 @@ class RegisterIn(BaseModel):
         if not v:
             raise ValueError("display_name must not be blank")
         return v
+
+    @model_validator(mode="after")
+    def _password_policy(self):
+        # After, not a field validator: "do not put your own name in your
+        # password" needs the other two fields. Every reason is reported at
+        # once, so nobody has to guess twice.
+        problems = password_problems(
+            self.password, email=self.email, display_name=self.display_name
+        )
+        if problems:
+            raise ValueError(" ".join(problems))
+        return self
 
 
 class LoginIn(BaseModel):
