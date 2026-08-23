@@ -1,0 +1,145 @@
+{
+  "schema_version": "1.0",
+  "game_id": "pyg2m8t5",
+  "graph_id": "pyb1as1c",
+  "archetype": "gauntlet",
+  "title": "Python Basics — rapid fire",
+  "chapters": [
+    {
+      "id": "g_names_types",
+      "title": "Names and types",
+      "concept_ids": ["variables", "data_types"],
+      "background": "cavern",
+      "scenes": [
+        {
+          "id": "g_rebind",
+          "type": "prediction",
+          "concept_id": "variables",
+          "prompt": "x = 2; y = x; x = 9. What is y?",
+          "options": [
+            { "id": "g_rebind_two", "text": "2", "correct": true },
+            { "id": "g_rebind_nine", "text": "9", "correct": false, "misconception_id": "names_stay_linked" },
+            { "id": "g_rebind_err", "text": "An error", "correct": false, "misconception_id": "equals_is_equality" }
+          ],
+          "reveal": "2. y was bound once, to whatever x held then. Nothing ties the two names together afterwards."
+        },
+        {
+          "id": "g_increment",
+          "type": "prediction",
+          "concept_id": "variables",
+          "prompt": "total = total + 1 — is this a valid line of Python?",
+          "options": [
+            { "id": "g_inc_yes", "text": "Yes: read the value, add one, rebind the name", "correct": true },
+            { "id": "g_inc_no", "text": "No: nothing can equal itself plus one", "correct": false, "misconception_id": "equals_is_equality" },
+            { "id": "g_inc_maybe", "text": "Only if total was never assigned before", "correct": false, "misconception_id": "equals_is_equality" }
+          ],
+          "reveal": "Valid, and extremely common. = is an instruction, not a claim about equality."
+        },
+        {
+          "id": "g_concat",
+          "type": "prediction",
+          "concept_id": "data_types",
+          "prompt": "What is \"2\" + \"3\"?",
+          "options": [
+            { "id": "g_cat_23", "text": "\"23\"", "correct": true },
+            { "id": "g_cat_5", "text": "5", "correct": false, "misconception_id": "quotes_are_cosmetic" },
+            { "id": "g_cat_err", "text": "A TypeError", "correct": false, "misconception_id": "quotes_are_cosmetic" }
+          ],
+          "reveal": "\"23\". Both are strings, so plus joins them. Two numbers would have been added instead — same operator, different types."
+        },
+        {
+          "id": "g_mixed",
+          "type": "prediction",
+          "concept_id": "data_types",
+          "prompt": "reply = input(\"How many? \") and the user types 4. Which line adds one correctly?",
+          "options": [
+            { "id": "g_mix_int", "text": "int(reply) + 1", "correct": true },
+            { "id": "g_mix_plain", "text": "reply + 1", "correct": false, "misconception_id": "input_returns_a_number" },
+            { "id": "g_mix_str", "text": "reply + \"1\"", "correct": false, "misconception_id": "quotes_are_cosmetic" }
+          ],
+          "reveal": "int(reply) + 1. input hands back the string \"4\"; reply + 1 is a TypeError and reply + \"1\" quietly gives \"41\"."
+        },
+        {
+          "id": "g_print_none",
+          "type": "prediction",
+          "concept_id": "print_output",
+          "prompt": "value = print(42). What is value?",
+          "options": [
+            { "id": "g_pn_none", "text": "None", "correct": true },
+            { "id": "g_pn_42", "text": "42", "correct": false, "misconception_id": "print_returns_the_value" },
+            { "id": "g_pn_str", "text": "\"42\"", "correct": false, "misconception_id": "print_returns_the_value" }
+          ],
+          "reveal": "None. 42 was shown on the screen; nothing was handed back to the program."
+        }
+      ]
+    },
+    {
+      "id": "g_lists_loops",
+      "title": "Lists and loops",
+      "concept_ids": ["lists", "indexing", "for_loops"],
+      "background": "observatory",
+      "scenes": [
+        {
+          "id": "g_order",
+          "type": "prediction",
+          "concept_id": "lists",
+          "prompt": "Does [1, 2] == [2, 1]?",
+          "options": [
+            { "id": "g_ord_no", "text": "No — order is part of a list", "correct": true },
+            { "id": "g_ord_yes", "text": "Yes — the same values are in both", "correct": false, "misconception_id": "list_is_a_bag" },
+            { "id": "g_ord_sorted", "text": "Yes, once Python sorts them", "correct": false, "misconception_id": "list_is_a_bag" }
+          ],
+          "reveal": "No. Two lists are equal only if the same values appear in the same order."
+        },
+        {
+          "id": "g_first",
+          "type": "prediction",
+          "concept_id": "indexing",
+          "prompt": "names = [\"ada\", \"bo\", \"cy\"]. Which expression gives \"ada\"?",
+          "options": [
+            { "id": "g_first_zero", "text": "names[0]", "correct": true },
+            { "id": "g_first_one", "text": "names[1]", "correct": false, "misconception_id": "index_starts_at_one" },
+            { "id": "g_first_len", "text": "names[len(names)]", "correct": false, "misconception_id": "index_starts_at_one" }
+          ],
+          "reveal": "names[0]. names[1] is \"bo\", and names[3] would raise an IndexError — the last valid index is one less than the length."
+        },
+        {
+          "id": "g_range",
+          "type": "prediction",
+          "concept_id": "for_loops",
+          "prompt": "Which numbers does range(4) produce?",
+          "options": [
+            { "id": "g_rng_0123", "text": "0, 1, 2, 3", "correct": true },
+            { "id": "g_rng_1234", "text": "1, 2, 3, 4", "correct": false, "misconception_id": "range_includes_the_end" },
+            { "id": "g_rng_01234", "text": "0, 1, 2, 3, 4", "correct": false, "misconception_id": "range_includes_the_end" }
+          ],
+          "reveal": "0, 1, 2, 3 — four numbers, stopping before 4. That is what makes range(len(items)) exactly a list's valid indexes."
+        },
+        {
+          "id": "g_loopvar",
+          "type": "prediction",
+          "concept_id": "for_loops",
+          "prompt": "scores = [90, 85, 100]. In for s in scores:, what is s on the first pass?",
+          "options": [
+            { "id": "g_lv_90", "text": "90, the first item", "correct": true },
+            { "id": "g_lv_0", "text": "0, the first position", "correct": false, "misconception_id": "loop_gives_positions" },
+            { "id": "g_lv_list", "text": "The whole list", "correct": false, "misconception_id": "loop_gives_positions" }
+          ],
+          "reveal": "90. This form walks the items themselves. Use enumerate(scores) when you want the position alongside the value."
+        },
+        {
+          "id": "g_mutate",
+          "type": "prediction",
+          "concept_id": "for_loops",
+          "prompt": "You want to drop every zero from a list. What should you do?",
+          "options": [
+            { "id": "g_mut_new", "text": "Build a new list of the non-zero items", "correct": true },
+            { "id": "g_mut_remove", "text": "Loop over the list and remove zeros as you find them", "correct": false, "misconception_id": "mutate_while_looping" },
+            { "id": "g_mut_append", "text": "Loop over the list and append the non-zeros to the same list", "correct": false, "misconception_id": "mutate_while_looping" }
+          ],
+          "reveal": "Build a new list. The loop tracks its position by number, so removing an item shifts the rest down and the next one is skipped; appending to the list you are walking can run forever."
+        }
+      ]
+    }
+  ]
+}

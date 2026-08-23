@@ -1,0 +1,148 @@
+{
+  "schema_version": "1.0",
+  "graph_id": "pyb1as1c",
+  "source": {
+    "title": "Programming Fundamentals with Python, Week 1",
+    "segment_count": 12
+  },
+  "concepts": [
+    {
+      "id": "variables",
+      "label": "Variables and assignment",
+      "summary": "A name bound to a value. The right-hand side is evaluated first, then the name is bound to the result, which is why count = count + 1 is an instruction rather than a contradiction.",
+      "bloom_level": "understand",
+      "prerequisites": [],
+      "source_spans": [
+        { "segment_id": 1, "quote": "A variable is a name bound to a value." },
+        { "segment_id": 2, "quote": "rebinding one does not disturb anything else" }
+      ],
+      "misconceptions": [
+        {
+          "id": "equals_is_equality",
+          "statement": "The single equals sign states that the two sides are equal, so count = count + 1 is impossible.",
+          "why_plausible": "Every prior year of mathematics teaches that = is a claim about two equal quantities, and x = x + 1 has no solutions there.",
+          "correction": "In Python = is an instruction: evaluate the right side, then bind the name to the result. The claim about equality is the double equals sign, ==."
+        },
+        {
+          "id": "names_stay_linked",
+          "statement": "After b = a, changing a also changes b, because the two names are tied together.",
+          "why_plausible": "The line reads like it sets up a relationship, and spreadsheet formulas really do keep following the cell they refer to.",
+          "correction": "Assignment happens once. b = a copies the reference at that moment; rebinding a afterwards leaves b holding the old value."
+        }
+      ]
+    },
+    {
+      "id": "data_types",
+      "label": "Types and conversion",
+      "summary": "Every value has a type, and the type decides what an operator means. Plus adds two numbers and joins two strings, so mixing them is an error rather than a guess.",
+      "bloom_level": "understand",
+      "prerequisites": ["variables"],
+      "source_spans": [
+        { "segment_id": 3, "quote": "the same operator can mean different things depending on the types it is given" },
+        { "segment_id": 4, "quote": "Quotation marks are not decoration." }
+      ],
+      "misconceptions": [
+        {
+          "id": "quotes_are_cosmetic",
+          "statement": "\"5\" and 5 are the same value written two ways, so \"5\" + 5 gives 10.",
+          "why_plausible": "They look identical on screen and read aloud the same, and some other languages do convert silently between them.",
+          "correction": "They are different types. Python refuses to guess whether plus should add or join, and raises a TypeError. Convert first with int(\"5\")."
+        },
+        {
+          "id": "input_returns_a_number",
+          "statement": "If the user types digits, what you get back is a number you can do arithmetic with.",
+          "why_plausible": "The user really did type a number, and nothing on screen distinguishes the digits they typed from an integer.",
+          "correction": "input always hands back a string, whatever was typed. Wrap it in int() or float() when you want to calculate with it."
+        }
+      ]
+    },
+    {
+      "id": "print_output",
+      "label": "Printing versus returning",
+      "summary": "print displays a value to a person as a side effect and hands back None. Showing a value and producing a value are different acts.",
+      "bloom_level": "understand",
+      "prerequisites": ["data_types"],
+      "source_spans": [
+        { "segment_id": 5, "quote": "What print does not do is give the value back to your program." },
+        { "segment_id": 6, "quote": "A function that prints its answer instead of returning it is a function whose answer nobody else can use." }
+      ],
+      "misconceptions": [
+        {
+          "id": "print_returns_the_value",
+          "statement": "result = print(\"hello\") puts the string \"hello\" into result.",
+          "why_plausible": "The word appears on screen the instant the line runs, so it plainly went somewhere, and the interactive prompt echoes values in exactly the same way.",
+          "correction": "print writes to the screen and hands back None, so result is None. A value your program needs has to be returned, not printed."
+        }
+      ]
+    },
+    {
+      "id": "lists",
+      "label": "Lists",
+      "summary": "An ordered collection written in square brackets. Order is part of the value, len reports the count, and append adds to the end.",
+      "bloom_level": "apply",
+      "prerequisites": ["data_types"],
+      "source_spans": [
+        { "segment_id": 7, "quote": "A list holds several values in order" },
+        { "segment_id": 7, "quote": "Order is part of the list" }
+      ],
+      "misconceptions": [
+        {
+          "id": "list_is_a_bag",
+          "statement": "A list is just a bag of values, so [1, 2] and [2, 1] are the same list.",
+          "why_plausible": "For many everyday purposes the order of a shopping list does not matter, and sets in mathematics genuinely ignore it.",
+          "correction": "Order is part of a list's identity. [1, 2] and [2, 1] are different lists and compare as unequal."
+        }
+      ]
+    },
+    {
+      "id": "indexing",
+      "label": "Indexing from zero",
+      "summary": "Items are reached by position in square brackets, counting from zero, so the last valid index of a list is one less than its length.",
+      "bloom_level": "apply",
+      "prerequisites": ["lists"],
+      "source_spans": [
+        { "segment_id": 8, "quote": "Indexing starts at zero." },
+        { "segment_id": 8, "quote": "the last index is always one less than the length" }
+      ],
+      "misconceptions": [
+        {
+          "id": "index_starts_at_one",
+          "statement": "The first item of a list is scores[1], and a list of three items has a scores[3].",
+          "why_plausible": "Counting anything else in life starts at one, and \"the first item\" and \"item one\" mean the same thing in English.",
+          "correction": "The first item is scores[0] and the last of three is scores[2]. Asking for scores[3] raises an IndexError."
+        }
+      ]
+    },
+    {
+      "id": "for_loops",
+      "label": "For loops and range",
+      "summary": "A for loop rebinds a name to each item of a sequence in turn and runs the block once per item. range counts up to, but never reaches, the number given.",
+      "bloom_level": "apply",
+      "prerequisites": ["lists", "indexing"],
+      "source_spans": [
+        { "segment_id": 9, "quote": "A for loop runs the same block of code once for each item in a sequence." },
+        { "segment_id": 10, "quote": "The range function stops before the number you give it" }
+      ],
+      "misconceptions": [
+        {
+          "id": "range_includes_the_end",
+          "statement": "range(3) produces 1, 2 and 3.",
+          "why_plausible": "\"Up to three\" means up to and including three in ordinary English, and counting out loud starts at one.",
+          "correction": "range(3) produces 0, 1 and 2 — three numbers, never 3. That is the same convention as indexing, which is why range(len(items)) is exactly the valid indexes."
+        },
+        {
+          "id": "loop_gives_positions",
+          "statement": "for score in scores binds score to each position, so you index with it.",
+          "why_plausible": "Loops in some other languages really do hand you a counter, and the two forms look alike on the page.",
+          "correction": "for score in scores binds score to each item itself. Use enumerate when you want the position as well."
+        },
+        {
+          "id": "mutate_while_looping",
+          "statement": "Removing items from a list while looping over it is fine, because the loop re-reads the list each time.",
+          "why_plausible": "The loop clearly does look at the list on every pass, so it seems as though it would notice the change.",
+          "correction": "The loop tracks its position by number. Removing an item shifts the rest down and the loop skips one. Build a new list instead."
+        }
+      ]
+    }
+  ]
+}
