@@ -1,40 +1,51 @@
 /**
- * The reading portal: the theory, in the order it builds.
+ * The reading portal: the course as the story it was written as.
  *
- * This panel makes no network call and cannot fail. Every byte it renders is
- * already inside the `CourseGraph` the world was loaded with, so opening it is
- * instant and closing it loses nothing — how far the learner has read lives in
- * the caller, not here.
+ * ## What changed, and why
  *
- * It mounts its own `VisualNovelShell`: walking into the gate is arriving
- * somewhere, not opening a dialog box. The storyteller who stands beside the
- * arch on the map is the one talking, and the concept's write-up is their line.
+ * This panel used to page through `graph.concepts` — a definition, its quotes
+ * and its common mistakes, one concept at a time. Everything on it was true and
+ * none of it was a story, which is exactly what a learner walking through a
+ * glowing arch expects to find on the other side.
  *
- * Three rules shape the whole file:
+ * The story was already in the payload. Every quest carries chapters with their
+ * own titles, a biome, a narrator and dialogue whose lines are prose written
+ * from the learner's own material — "Every crate in this village wears a label,
+ * and every label can be peeled off and stuck on another crate." Since the hub
+ * redesign the quest is not walkable, so all of that has been shipped to the
+ * browser and never shown. `storybook.ts` is the join, and this file is what it
+ * looks like: the chapter's room across the top, the narration delivered a line
+ * at a time by whoever the chapter says is talking, and the concepts that
+ * chapter teaches underneath, still with their quotes and their mistakes.
  *
- * - **Graph order is teaching order.** `graph.concepts` is already sorted so
- *   that nothing depends on something further down the list. The rail is that
- *   list, unsorted and unfiltered, which is why there is no ordering logic
+ * ## The rules that did not change
+ *
+ * - **Nothing on screen is written by us.** Titles, narration, write-ups,
+ *   quotes and mistakes are all generated or extracted content. Real content is
+ *   thin — often one common mistake, sometimes no quote at all — so every field
+ *   is guarded and a missing one renders nothing. Connective prose that implies
+ *   content we do not have is the one thing this screen must never print. The
+ *   only strings this file owns are about *reading*: which page you are on, and
+ *   what a button does.
+ * - **Content order is teaching order.** Chapters are in the order the quest
+ *   wrote them and concepts in the order the graph did, and there is no sorting
  *   anywhere below.
- * - **Nothing on screen is written by us.** The label, the write-up, the quotes
- *   and the three lines of each common mistake are generated or extracted
- *   content. Real content is thin — often one common mistake, sometimes no
- *   quote at all — so every field is guarded and a missing one renders nothing.
- *   Connective prose that implies content we do not have is the one thing this
- *   screen must never print.
+ * - **It makes no network call and cannot fail.** Every byte is already in the
+ *   world the panel was handed, so opening it is instant and closing it loses
+ *   nothing.
  * - **A concept carries up to six verbatim quotes and this shows all of them.**
- *   They are the only part of the screen the learner can check against their own
- *   material, so dropping five of six was throwing away the evidence. The first
- *   is open; the rest are one click away, because six blockquotes at once is the
- *   wall of text this redesign exists to kill.
+ *   The first is open, the rest are one click away.
  *
  * Every string here is read by a first-year student who has never seen our
  * docs: the vocabulary of the schema stays in the code and out of the screen.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { BloomLevel, Concept, CourseGraph, Misconception, SourceSpan } from '../api/types'
+import type { BloomLevel, Concept, CourseGraph, Game, Misconception, SourceSpan } from '../api/types'
 import { filled, Insight, SourceQuote } from './SceneStages'
+import type { StoryPage } from './storybook'
+import { buildStory, pageRead } from './storybook'
+import { StoryStage } from './StoryStage'
 import { useCoarsePointer } from './useCoarsePointer'
 import { VisualNovelShell } from './vn'
 import { portalArt } from './vocabulary'
@@ -42,6 +53,12 @@ import { portalArt } from './vocabulary'
 export interface StorybookPanelProps {
   /** The course content. Null degrades to an empty state, never throws. */
   graph: CourseGraph | null
+  /**
+   * The quest, which is where the narration and the rooms live. Null or
+   * chapterless degrades to one page per concept — what this panel showed
+   * before it learned about chapters.
+   */
+  quest?: Game | null
   /** Concept ids the learner has already opened. */
   readIds: ReadonlySet<string>
   /** Called every time a concept is opened, including the first one shown. */
@@ -85,31 +102,61 @@ const quotesOf = (concept: Concept): SourceSpan[] =>
 const speakable = (mistake: Misconception) =>
   filled(mistake.statement) || filled(mistake.why_plausible) || filled(mistake.correction)
 
-export function StorybookPanel({ graph, readIds, onRead, xp = null, onClose }: StorybookPanelProps) {
+export function StorybookPanel({ graph, quest = null, readIds, onRead, xp = null, onClose }: StorybookPanelProps) {
   const coarse = useCoarsePointer()
-  const concepts = useMemo(() => graph?.concepts ?? [], [graph])
-  const total = concepts.length
+  const pages = useMemo(() => buildStory(graph, quest), [graph, quest])
+  const total = pages.length
   const [index, setIndex] = useState(0)
 
   // A world can be reloaded with different content while the portal is open.
   const safeIndex = total === 0 ? 0 : Math.min(index, total - 1)
-  const concept = total === 0 ? null : concepts[safeIndex]
-  const conceptId = concept?.id ?? null
+  const page: StoryPage | null = total === 0 ? null : pages[safeIndex]
 
   /**
-   * Opening a concept marks it read.
+   * How much of this page's narration has been delivered.
+   *
+   * Beats arrive one at a time because that is what makes it a scene rather
+   * than a wall of prose — but a page whose ideas the learner has already read
+   * opens with all of it, so coming back to look something up is not a click
+   * count. Keyed off the page id, so turning the page starts the next one over.
+   */
+  //
+  // Whether the page was *already* read when the learner arrived at it — not
+  // whether it is read now. Opening a page marks everything on it read, so
+  // asking `readIds` live would make every page already-read the instant it
+  // appeared and no chapter would ever be narrated at all.
+  //
+  // Recorded by adjusting state during render rather than in an effect: an
+  // effect runs after the paint, so the first frame of every page would show
+  // the whole chapter and then collapse back to its first line.
+  const [arrival, setArrival] = useState<{ id: string; whole: boolean } | null>(null)
+  const arrived = page !== null && arrival?.id === page.id
+  if (page !== null && !arrived) setArrival({ id: page.id, whole: pageRead(page, readIds) })
+  const opensWhole = arrived ? arrival!.whole : page !== null && pageRead(page, readIds)
+  const [beat, setBeat] = useState(0)
+  const shownBeats = opensWhole ? (page?.beats.length ?? 0) : Math.min(beat + 1, page?.beats.length ?? 0)
+  const beatsLeft = (page?.beats.length ?? 0) - shownBeats
+  // The material is what the page is for; the narration is how you arrive at
+  // it. It appears once the narration is done, and immediately when there is
+  // none — never behind a click the learner has to guess at.
+  const revealed = beatsLeft <= 0
+
+  /**
+   * Opening a page marks everything it teaches as read.
    *
    * The callback is held in a ref so that a caller passing a fresh closure on
    * every render cannot turn this into a loop: the read is caused by *which*
-   * concept is on screen, never by the identity of the handler.
+   * page is on screen, never by the identity of the handler.
    */
   const readRef = useRef(onRead)
   useEffect(() => {
     readRef.current = onRead
   })
+  const conceptIdsOnPage = page?.concepts.map((concept) => concept.id).join(',') ?? ''
   useEffect(() => {
-    if (conceptId !== null) readRef.current(conceptId)
-  }, [conceptId])
+    if (!conceptIdsOnPage) return
+    for (const id of conceptIdsOnPage.split(',')) readRef.current(id)
+  }, [conceptIdsOnPage])
 
   // Scrolls the card back to its top when the learner moves on, but only then:
   // doing it on mount would yank the whole overlay as the portal opens.
@@ -119,6 +166,7 @@ export function StorybookPanel({ graph, readIds, onRead, xp = null, onClose }: S
     (next: number) => {
       if (total === 0) return
       navigated.current = true
+      setBeat(0)
       setIndex(Math.max(0, Math.min(next, total - 1)))
     },
     [total],
@@ -129,6 +177,12 @@ export function StorybookPanel({ graph, readIds, onRead, xp = null, onClose }: S
     cardRef.current?.scrollIntoView({ block: 'nearest' })
   }, [safeIndex])
 
+  /** One more line of narration, or the next page once there is none left. */
+  const advance = useCallback(() => {
+    if (beatsLeft > 0) setBeat((current) => current + 1)
+    else goTo(safeIndex + 1)
+  }, [beatsLeft, goTo, safeIndex])
+
   /** Arrow keys page through, which is what a reader's hands expect. */
   useEffect(() => {
     if (total === 0) return
@@ -138,7 +192,7 @@ export function StorybookPanel({ graph, readIds, onRead, xp = null, onClose }: S
       if (target instanceof Element && target.closest('input, textarea, select')) return
       if (event.key === 'ArrowRight') {
         event.preventDefault()
-        goTo(safeIndex + 1)
+        advance()
       } else if (event.key === 'ArrowLeft') {
         event.preventDefault()
         goTo(safeIndex - 1)
@@ -146,18 +200,16 @@ export function StorybookPanel({ graph, readIds, onRead, xp = null, onClose }: S
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [goTo, safeIndex, total])
+  }, [advance, goTo, safeIndex, total])
 
   const readCount = useMemo(
-    () => concepts.reduce((sum, entry) => sum + (readIds.has(entry.id) ? 1 : 0), 0),
-    [concepts, readIds],
+    () => pages.reduce((sum, entry) => sum + (pageRead(entry, readIds) ? 1 : 0), 0),
+    [pages, readIds],
   )
-
-  const byId = useMemo(() => new Map(concepts.map((entry, slot) => [entry.id, slot])), [concepts])
 
   // An empty graph is possible — a source that yielded nothing still loads a
   // world — and saying so beats a blank page that looks broken.
-  if (concept === null) {
+  if (page === null) {
     return (
       <VisualNovelShell kind="storybook" title="Nothing to read yet" xp={xp} onClose={onClose}>
         <p className="leading-7 text-ink-muted">
@@ -173,51 +225,61 @@ export function StorybookPanel({ graph, readIds, onRead, xp = null, onClose }: S
 
   const art = portalArt('storybook')
   const sourceTitle = graph && filled(graph.source.title) ? graph.source.title : null
-  const quotes = quotesOf(concept)
-  const mistakes = concept.misconceptions.filter(speakable)
-  const summary = filled(concept.summary) ? concept.summary : null
-  const bare = summary === null && quotes.length === 0 && mistakes.length === 0
   const isFirst = safeIndex === 0
   const isLast = safeIndex === total - 1
+  // The narrator's current line. A page with no narration falls back to the
+  // write-up of what it teaches, which is what this panel always spoke.
+  const line =
+    page.beats.length > 0
+      ? page.beats[Math.max(0, shownBeats - 1)]
+      : (page.concepts.find((concept) => filled(concept.summary))?.summary ?? undefined)
 
-  // Only the prerequisites that resolve to something in this world. An id with
-  // no concept behind it is a dangling reference, not a reading suggestion.
-  const builtOn = concept.prerequisites
-    .map((id) => {
-      const slot = byId.get(id)
-      return slot === undefined ? null : { slot, label: concepts[slot].label }
-    })
-    .filter((entry): entry is { slot: number; label: string } => entry !== null)
+  // With one concept, its name is already the chapter title, so repeating it
+  // as a heading is noise.
+  const single = page.concepts.length === 1
+  // ...and when there is no narration either, the write-up *is* the line the
+  // storyteller is saying, so the notes must not print it a second time. A
+  // chapter that narrates does not have that problem: its line is the story.
+  const summaryIsSpoken = single && page.beats.length === 0
 
   return (
     <VisualNovelShell
       kind="storybook"
-      title={concept.label}
-      subtitle={aimOf(concept)}
+      title={page.title}
+      // Where you are in the book. It is about the reading, not the content.
+      subtitle={total > 1 ? `Chapter ${safeIndex + 1} of ${total}` : undefined}
       progress={{ done: readCount, total, label: 'read' }}
       xp={xp}
-      speaker={{ actor: 'villager' }}
-      // The write-up is what the storyteller says. Blank omits the whole band
-      // rather than putting an empty speech bubble on the screen.
-      dialogue={summary ?? undefined}
-      footerHint={coarse ? 'Use Previous and Next to turn the page.' : 'Arrow keys ← and → turn the page.'}
+      speaker={{ actor: page.narrator }}
+      dialogue={line}
+      illustration={
+        <StoryStage background={page.background} props={page.props} caption={page.title} accent={art.rim} />
+      }
+      footerHint={
+        beatsLeft > 0
+          ? coarse
+            ? 'Tap Continue to hear the rest.'
+            : 'Press → or Continue to hear the rest.'
+          : coarse
+            ? 'Use Previous and Next to turn the page.'
+            : 'Arrow keys ← and → turn the page.'
+      }
       onClose={onClose}
       closeLabel="Back to the hub"
     >
-      <div className="grid gap-6 sm:grid-cols-[minmax(9rem,12rem)_1fr]">
-        {/* The rail is the course, in the order it builds. Nothing is locked:
-            skipping ahead is allowed, it just is not the order it was written in. */}
+      <div className="grid gap-6 sm:grid-cols-[minmax(9rem,13rem)_1fr]">
+        {/* The rail is the book's contents, in the order it was written.
+            Nothing is locked: skipping ahead is allowed, it just is not the
+            order it was told in. */}
         <nav aria-label="What this world covers">
-          <p className="eyebrow text-ink-muted">In the order it builds</p>
+          <p className="eyebrow text-ink-muted">In the order it happens</p>
           <ol className="mt-3 space-y-1.5">
-            {concepts.map((entry, slot) => {
+            {pages.map((entry, slot) => {
               const current = slot === safeIndex
-              const seen = readIds.has(entry.id)
+              const seen = pageRead(entry, readIds)
               const tone = current
                 ? 'border-secondary bg-secondary/10 text-ink'
-                : seen
-                  ? 'border-white/10 bg-surface-high/60 text-ink-muted hover:border-white/25'
-                  : 'border-white/10 bg-surface-high/30 text-ink-muted hover:border-white/25'
+                : 'border-white/10 bg-surface-high/40 text-ink-muted hover:border-white/25'
               return (
                 <li key={entry.id}>
                   <button
@@ -232,7 +294,7 @@ export function StorybookPanel({ graph, readIds, onRead, xp = null, onClose }: S
                     >
                       {slot + 1}
                     </span>
-                    <span className="text-sm font-semibold leading-5">{entry.label}</span>
+                    <span className="min-w-0 text-sm font-semibold leading-5">{entry.title}</span>
                     {seen && (
                       <span className="ml-auto text-xs font-black text-secondary">
                         <span aria-hidden="true">✓</span>
@@ -246,90 +308,144 @@ export function StorybookPanel({ graph, readIds, onRead, xp = null, onClose }: S
           </ol>
         </nav>
 
-        <article key={concept.id} ref={cardRef} className="min-w-0 scroll-mt-2">
-          {/* Where this one sits in the chain. The names are the learner's own
-              material and the jump is the fastest way back to them. */}
-          {builtOn.length > 0 && (
-            <div className="flex flex-wrap items-baseline gap-2">
-              <p className="eyebrow text-ink-muted">Builds on</p>
-              {builtOn.map((entry) => (
-                <button
-                  key={entry.slot}
-                  type="button"
-                  className="rounded-lg border border-white/12 bg-surface-high px-2.5 py-1 text-xs font-bold text-ink-muted transition hover:border-white/30 hover:text-ink"
-                  onClick={() => goTo(entry.slot)}
-                >
-                  {entry.label}
-                </button>
-              ))}
-            </div>
-          )}
+        <article key={page.id} ref={cardRef} className="min-w-0 scroll-mt-2">
+          {/* The notes are what the page is for; while the chapter is still
+              being told there is nothing here but the story. */}
+          {revealed &&
+            page.concepts.map((concept) => (
+              <ConceptNotes
+                key={concept.id}
+                concept={concept}
+                sourceTitle={sourceTitle}
+                heading={!single}
+                showSummary={!summaryIsSpoken}
+              />
+            ))}
 
-          {summary === null && (
-            <p className="mt-4 max-w-prose leading-7 text-ink-muted">No write-up was saved for this one.</p>
-          )}
-
-          {/* Verbatim from the upload. It is here because the learner can check
-              it against their own material — which is why we never paraphrase
-              it and never print the block without one. */}
-          {quotes.length > 0 && (
-            <div className="mt-6">
-              <SourceQuotes key={concept.id} quotes={quotes} title={sourceTitle} />
-            </div>
-          )}
-
-          {mistakes.length > 0 && (
-            <div className="mt-7">
-              <p className="eyebrow text-ink-muted">
-                {mistakes.length === 1 ? 'Where people trip up' : `Where people trip up · ${mistakes.length}`}
-              </p>
-              <div className="mt-3 space-y-5">
-                {mistakes.map((mistake) => (
-                  <div key={mistake.id} className="space-y-3">
-                    {filled(mistake.statement) && (
-                      <Insight label="A common mistake" text={mistake.statement} tone="amber" />
-                    )}
-                    {filled(mistake.why_plausible) && (
-                      <Insight label="Why that's tempting" text={mistake.why_plausible} />
-                    )}
-                    {filled(mistake.correction) && (
-                      <Insight label="What's actually true" text={mistake.correction} tone="teal" />
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Only reachable when the label is genuinely all that was saved.
-              Stating that is honest; writing a paragraph to fill the space
-              would be indistinguishable from grounded content. */}
-          {bare && (
-            <p className="mt-4 max-w-prose leading-7 text-ink-muted">
-              Nothing else was saved for this one — no lines from your notes, and no common mistakes.
+          {/* A chapter that only narrates. Saying so is honest; writing a
+              paragraph to fill the space would be indistinguishable from
+              grounded content. */}
+          {revealed && page.concepts.length === 0 && (
+            <p className="max-w-prose leading-7 text-ink-muted">
+              This part of the story does not introduce a new idea — it sets up the ones on either side of it.
             </p>
           )}
 
-          <div className="mt-8 flex flex-wrap items-center gap-3 border-t border-white/10 pt-6">
+          {/* One bar, whatever the page is doing. Two of them — a "Continue"
+              for the story and a "Next" for the page — read as two different
+              forwards, and the reader has to work out which one they meant. */}
+          <div
+            className={`flex flex-wrap items-center gap-3 ${revealed ? 'mt-8 border-t border-white/10 pt-6' : ''}`}
+          >
             <button className="button-secondary" onClick={() => goTo(safeIndex - 1)} disabled={isFirst}>
               Previous
             </button>
-            {isLast ? (
+            {isLast && revealed ? (
               <button className="button-primary" onClick={onClose}>
                 Back to the hub
               </button>
             ) : (
-              <button className="button-primary" onClick={() => goTo(safeIndex + 1)}>
-                Next
+              <button className="button-primary" onClick={advance}>
+                {beatsLeft > 0 ? 'Continue' : 'Next'}
+              </button>
+            )}
+            {/* The way out of the story, for a reader who came back to look
+                something up rather than to be told it again. */}
+            {beatsLeft > 0 && (
+              <button className="button-secondary" onClick={() => setBeat(page.beats.length)}>
+                Skip to the notes
               </button>
             )}
             <p className="ml-auto font-hud text-[11px]" style={{ color: art.rim }}>
-              {safeIndex + 1} / {total}
+              {beatsLeft > 0
+                ? `${shownBeats} / ${page.beats.length}`
+                : `${safeIndex + 1} / ${total}`}
             </p>
           </div>
         </article>
       </div>
     </VisualNovelShell>
+  )
+}
+
+/**
+ * One idea's notes: the write-up, the lines it came from, and where people
+ * trip up. Every block is guarded — real content is thin, and a heading over
+ * nothing is worse than no heading.
+ */
+function ConceptNotes({
+  concept,
+  sourceTitle,
+  heading,
+  showSummary,
+}: {
+  concept: Concept
+  sourceTitle: string | null
+  /** Its own name above it. Off when the page title already is that name. */
+  heading: boolean
+  /** Off only when the storyteller is currently saying this write-up. */
+  showSummary: boolean
+}) {
+  const quotes = quotesOf(concept)
+  const mistakes = concept.misconceptions.filter(speakable)
+  const summary = filled(concept.summary) ? concept.summary : null
+  const bare = summary === null && quotes.length === 0 && mistakes.length === 0
+  const aim = aimOf(concept)
+
+  return (
+    <section className="mb-8 last:mb-0">
+      {heading && (
+        <header className="mb-3">
+          <h3 className="text-base font-black tracking-tight text-ink">{concept.label}</h3>
+          {aim && <p className="text-xs font-semibold text-ink-muted">{aim}</p>}
+        </header>
+      )}
+
+      {showSummary && summary && <p className="max-w-prose leading-7 text-ink">{summary}</p>}
+
+      {summary === null && (
+        <p className="max-w-prose leading-7 text-ink-muted">No write-up was saved for this one.</p>
+      )}
+
+      {/* Verbatim from the upload. It is here because the learner can check it
+          against their own material — which is why we never paraphrase it and
+          never print the block without one. */}
+      {quotes.length > 0 && (
+        <div className="mt-6">
+          <SourceQuotes key={concept.id} quotes={quotes} title={sourceTitle} />
+        </div>
+      )}
+
+      {mistakes.length > 0 && (
+        <div className="mt-7">
+          <p className="eyebrow text-ink-muted">
+            {mistakes.length === 1 ? 'Where people trip up' : `Where people trip up · ${mistakes.length}`}
+          </p>
+          <div className="mt-3 space-y-5">
+            {mistakes.map((mistake) => (
+              <div key={mistake.id} className="space-y-3">
+                {filled(mistake.statement) && (
+                  <Insight label="A common mistake" text={mistake.statement} tone="amber" />
+                )}
+                {filled(mistake.why_plausible) && (
+                  <Insight label="Why that's tempting" text={mistake.why_plausible} />
+                )}
+                {filled(mistake.correction) && (
+                  <Insight label="What's actually true" text={mistake.correction} tone="teal" />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Only reachable when the label is genuinely all that was saved. */}
+      {bare && (
+        <p className="max-w-prose leading-7 text-ink-muted">
+          Nothing else was saved for this one — no lines from your notes, and no common mistakes.
+        </p>
+      )}
+    </section>
   )
 }
 
