@@ -346,6 +346,46 @@ export interface ExplainOut {
   server_xp: number
 }
 
+/**
+ * One line of the Socratic Explain-to-Win transcript. `learner` is the person
+ * playing; `student` is the AI that keeps asking why.
+ */
+export interface ExplainTurn {
+  role: 'learner' | 'student'
+  /** 1-1200 chars. */
+  text: string
+}
+
+/**
+ * The whole conversation, every time: the server keeps no chat state, so the
+ * client owns the transcript and the endpoint is a pure function of it.
+ *
+ * Rejected with 422 unless: 1-12 turns, each 1-1200 chars, 8000 chars in total
+ * at most, the last turn is the learner's, and the learner's turns together
+ * come to at least 20 characters. Guard all of it before sending.
+ */
+export interface ExplainChatIn {
+  concept_id: string
+  turns: ExplainTurn[]
+}
+
+/**
+ * `question` is what the AI student says next, null once it is done.
+ * `result` is the graded outcome, non-null exactly when `done` — that final
+ * turn is the only one that writes anything or awards XP.
+ */
+export interface ExplainChatOut {
+  done: boolean
+  /** 0-100. How much of the concept the AI student has grasped. */
+  understanding: number
+  question: string | null
+  /** Ids into `Concept.misconceptions`; the wrong idea the question is chasing. */
+  targeted_misconception_id: string | null
+  /** How many more times the learner may answer before it ends. */
+  turns_remaining: number
+  result: ExplainOut | null
+}
+
 /** FastAPI error body. `detail` is a string for app errors, a list for 422 validation errors. */
 export interface ApiErrorBody {
   detail: string | Array<{ loc: Array<string | number>; msg: string; type: string }>

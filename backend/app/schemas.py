@@ -435,3 +435,63 @@ class ExplainOut(BaseModel):
         "misconception_id": None,
         "concept": ConceptOut.model_config["json_schema_extra"]["example"],
         "world_xp": 62, "server_xp": 62}})
+
+
+class ExplainTurn(BaseModel):
+    """One line of the Socratic transcript. `learner` is the student playing;
+    `student` is the AI that keeps asking why."""
+    role: Literal["learner", "student"]
+    text: str = Field(min_length=1, max_length=1200)
+    model_config = ConfigDict(json_schema_extra={"example": {
+        "role": "learner",
+        "text": "Overfitting is when a model learns the training data too well."}})
+
+
+class ExplainChatIn(BaseModel):
+    """The whole conversation, every time: the server keeps no chat state, so
+    the client owns the transcript and the endpoint is a pure function of it.
+    Only `learner` turns are ever scored."""
+    concept_id: str
+    turns: list[ExplainTurn] = Field(min_length=1, max_length=12)
+    model_config = ConfigDict(json_schema_extra={"example": {
+        "concept_id": "overfitting",
+        "turns": [
+            {"role": "learner",
+             "text": "Overfitting is when a model learns the training data too well."},
+            {"role": "student",
+             "text": "Wait — I thought 99 percent on training means roughly 99 percent on "
+                     "new data. Why is that not right?"},
+            {"role": "learner",
+             "text": "The two scores decouple once the model starts fitting noise: training "
+                     "error keeps falling while the error on new data rises."},
+        ]}})
+
+    @field_validator("turns")
+    @classmethod
+    def _check_transcript(cls, v: list[ExplainTurn]) -> list[ExplainTurn]:
+        if v[-1].role != "learner":
+            raise ValueError("the last turn must be the learner's")
+        if sum(len(t.text) for t in v) > 8000:
+            raise ValueError("transcript must be at most 8000 characters")
+        learner_text = " ".join(t.text for t in v if t.role == "learner").strip()
+        if len(learner_text) < 20:
+            raise ValueError("say at least 20 characters in your own words")
+        return v
+
+
+class ExplainChatOut(BaseModel):
+    """`question` is what the AI student says next (null once it is done);
+    `result` is the graded ExplainOut, present only on the final turn — that is
+    the only turn that writes anything or awards XP."""
+    done: bool
+    understanding: int
+    question: str | None = None
+    targeted_misconception_id: str | None = None
+    turns_remaining: int
+    result: ExplainOut | None = None
+    model_config = ConfigDict(json_schema_extra={"example": {
+        "done": False, "understanding": 47,
+        "question": "Wait — I thought 99 percent on training means roughly 99 percent on new "
+                    "data. Why is that not right?",
+        "targeted_misconception_id": "high_train_high_test",
+        "turns_remaining": 3, "result": None}})

@@ -21,6 +21,7 @@ public server join code `DEMO01`.
 | `fixtures/` | Hand-written demo content (overfitting) seeded as the public demo server |
 | `CONTRACTS.md` | API contract for the frontend, with JSON examples |
 | `docs/OPERATIONS.md` | **Deploy, environment, smoke tests, debugging — read this before touching prod** |
+| `docs/ATTRIBUTION.md` | Where the sprites come from, the licence terms, and how to re-cut them |
 | `docs/` | Proposal, research notes, alignment deck |
 
 ## Run it

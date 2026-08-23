@@ -9,7 +9,7 @@ from app import models, schemas
 from app.db import get_db
 from app.deps import current_user, world_and_membership
 from app.ids import new_id, utc_now_iso
-from app.services import explain, progress, scoring
+from app.services import explain, progress, scoring, socratic
 
 router = APIRouter(prefix="/worlds", tags=["worlds"])
 
@@ -39,6 +39,12 @@ def _find_misconception(graph: dict | None, misconception_id: str | None) -> dic
             if m.get("id") == misconception_id:
                 return {"id": m["id"], "statement": m["statement"], "correction": m["correction"]}
     return None
+
+
+def _render_transcript(turns: list[schemas.ExplainTurn]) -> str:
+    """The conversation as it is stored in Explanation.text (an unbounded
+    column that already exists — the chat adds no schema of its own)."""
+    return "\n\n".join(f"{t.role}: {t.text}" for t in turns)
 
 
 def _find_concept(graph: dict | None, concept_id: str) -> dict | None:
@@ -231,4 +237,79 @@ def explain_concept(
         concept=schemas.ConceptOut(id=concept["id"], label=concept["label"], summary=concept["summary"]),
         world_xp=progress.user_xp(db, user.id, world_id=world.id),
         server_xp=progress.user_xp(db, user.id, server_id=server.id),
+    )
+
+
+@router.post("/{world_id}/explain/turn", response_model=schemas.ExplainChatOut)
+def explain_turn(
+    body: schemas.ExplainChatIn,
+    wsm: tuple = Depends(world_and_membership),
+    user: models.User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    """One turn of the Socratic Explain-to-Win chat.
+
+    Stateless: the client posts the whole transcript and the reply is a pure
+    function of (concept, turns). Nothing is written until the AI student is
+    done, so an abandoned conversation earns nothing and a failed request costs
+    nothing — retrying re-posts an identical body.
+    """
+    world, server, _membership = wsm
+    if world.status != "ready":
+        raise HTTPException(status.HTTP_409_CONFLICT, "World is not ready")
+
+    graph = _load(world.graph_json)
+    concept = _find_concept(graph, body.concept_id)
+    if concept is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Unknown concept")
+
+    turn = socratic.next_turn(concept, [t.model_dump() for t in body.turns])
+
+    if not turn["done"]:
+        return schemas.ExplainChatOut(
+            done=False, understanding=turn["understanding"], question=turn["question"],
+            targeted_misconception_id=turn["targeted_misconception_id"],
+            turns_remaining=turn["turns_remaining"], result=None,
+        )
+
+    # Done: the same award block as POST /worlds/{id}/explain, with the
+    # rendered transcript standing in for the one-shot text.
+    score = scoring.clamp_score(turn["understanding"])
+    verdict = turn["verdict"]
+    feedback = turn["feedback"]
+    misconception_id = turn.get("misconception_id")
+
+    first_time = (
+        db.query(models.Explanation.id)
+        .filter_by(world_id=world.id, user_id=user.id, concept_id=body.concept_id)
+        .filter(models.Explanation.verdict.in_(["pass", "partial"]))
+        .first()
+        is None
+    )
+    xp = scoring.xp_for_explain(verdict, first_time=first_time)
+    now = utc_now_iso()
+
+    db.add(models.Explanation(
+        id=new_id(), user_id=user.id, world_id=world.id, concept_id=body.concept_id,
+        text=_render_transcript(body.turns), score=score, verdict=verdict, feedback=feedback,
+        misconception_id=misconception_id, created_at=now,
+    ))
+    db.add(models.Attempt(
+        id=new_id(), user_id=user.id, server_id=server.id, world_id=world.id,
+        game_id=world.graph_id, archetype="explain", scene_id=f"explain:{body.concept_id}",
+        option_id=None, correct=(verdict == "pass"), xp=xp, created_at=now,
+    ))
+    db.commit()
+
+    return schemas.ExplainChatOut(
+        done=True, understanding=score, question=None,
+        targeted_misconception_id=None, turns_remaining=0,
+        result=schemas.ExplainOut(
+            score=score, verdict=verdict, xp_awarded=xp, feedback=feedback,
+            misconception_id=misconception_id,
+            concept=schemas.ConceptOut(
+                id=concept["id"], label=concept["label"], summary=concept["summary"]),
+            world_xp=progress.user_xp(db, user.id, world_id=world.id),
+            server_xp=progress.user_xp(db, user.id, server_id=server.id),
+        ),
     )
