@@ -12,14 +12,21 @@
  * walking is smooth and key repeat never gates it. Collision resolves X and Y
  * independently, which is what makes the player slide along a wall instead of
  * sticking to it when walking diagonally into it.
+ *
+ * Two input sources feed one vector: the held keys and the on-screen stick,
+ * combined in `input.ts`. The keyboard's behaviour is unchanged to the bit —
+ * see the golden test in `input.test.ts`, which is the reason to trust that
+ * sentence rather than a claim about it.
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
+import { facingFrom, KEY_VECTORS, resolveIntent } from './input'
+import type { Facing } from './input'
 import { FLOOR, tileAt } from './types'
 import type { Point, WorldMap } from './types'
 
-export type Facing = 'down' | 'up' | 'left' | 'right'
+export type { Facing }
 
 /** Live player state, in sub-tile float coordinates. Mutated in place by the loop. */
 export interface PlayerBody {
@@ -36,6 +43,12 @@ export interface PlayerHandle {
   body: RefObject<PlayerBody>
   /** The tile under the player. React state, updated only when it changes. */
   tile: Point
+  /**
+   * The on-screen thumbstick's intent, in tile-space axes, never longer than 1.
+   * Imperative and identity-stable: it is written on every pointermove and
+   * renders nothing, for the same reason the body is a ref.
+   */
+  setAnalog: (x: number, y: number) => void
 }
 
 export interface PlayerOptions {
@@ -56,17 +69,6 @@ const HALF_H = 0.26
 const DEFAULT_SPEED = 5.4
 /** Clamps the delta so a backgrounded tab does not teleport the player through a wall on return. */
 const MAX_STEP_SECONDS = 1 / 20
-
-const KEY_VECTORS: Record<string, Point> = {
-  arrowup: { x: 0, y: -1 },
-  w: { x: 0, y: -1 },
-  arrowdown: { x: 0, y: 1 },
-  s: { x: 0, y: 1 },
-  arrowleft: { x: -1, y: 0 },
-  a: { x: -1, y: 0 },
-  arrowright: { x: 1, y: 0 },
-  d: { x: 1, y: 0 },
-}
 
 /** Keys the browser would otherwise use to scroll the page under the canvas. */
 const SCROLL_KEYS = new Set(['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'spacebar'])
@@ -117,12 +119,22 @@ export function usePlayer(map: WorldMap | null, options: PlayerOptions = {}): Pl
   }, [enabled, speed])
 
   const held = useRef<Set<string>>(new Set())
+  /** Mutated in place, so steering allocates nothing per frame. */
+  const analog = useRef<Point>({ x: 0, y: 0 })
+
+  const setAnalog = useCallback((x: number, y: number) => {
+    analog.current.x = x
+    analog.current.y = y
+  }, [])
 
   useEffect(() => {
     if (!map) return
 
     const keys = held.current
     keys.clear()
+    // A thumb still down on the old map must not steer the new one.
+    analog.current.x = 0
+    analog.current.y = 0
 
     // Spawn is part of the map: a new map means a new starting tile. The first
     // frame publishes the tile, so no render is needed here.
@@ -150,8 +162,14 @@ export function usePlayer(map: WorldMap | null, options: PlayerOptions = {}): Pl
     }
 
     // A key held while the window loses focus never sends its keyup, which would
-    // leave the player walking into a wall forever.
-    const release = () => keys.clear()
+    // leave the player walking into a wall forever. The stick has the same
+    // failure: iOS steals a touch for a system gesture and the pointerup never
+    // arrives, so it is released here too.
+    const release = () => {
+      keys.clear()
+      analog.current.x = 0
+      analog.current.y = 0
+    }
 
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)
@@ -176,36 +194,29 @@ export function usePlayer(map: WorldMap | null, options: PlayerOptions = {}): Pl
 
       if (!enabledRef.current) {
         keys.clear()
+        // The finger is very likely still down — a portal opens under it — so
+        // the stick has to be dropped here too, or closing the portal resumes
+        // at whatever the last tilt was.
+        analog.current.x = 0
+        analog.current.y = 0
         player.moving = false
         publishTile()
         return
       }
 
-      let ix = 0
-      let iy = 0
-      for (const key of keys) {
-        const vector = KEY_VECTORS[key]
-        if (!vector) continue
-        ix += vector.x
-        iy += vector.y
-      }
+      const intent = resolveIntent(keys, analog.current)
 
-      if (ix === 0 && iy === 0) {
+      if (intent.x === 0 && intent.y === 0) {
         player.moving = false
         publishTile()
         return
       }
 
-      // Normalise so diagonals are not faster than the cardinals.
-      const length = Math.hypot(ix, iy)
       const distance = speedRef.current * dt
-      const dx = (ix / length) * distance
-      const dy = (iy / length) * distance
+      const dx = intent.x * distance
+      const dy = intent.y * distance
 
-      // Facing follows intent, not the resolved move, so sliding along a wall
-      // does not spin the sprite around.
-      if (Math.abs(ix) > Math.abs(iy)) player.facing = ix > 0 ? 'right' : 'left'
-      else if (iy !== 0) player.facing = iy > 0 ? 'down' : 'up'
+      player.facing = facingFrom(intent.x, intent.y, player.facing)
 
       const fromX = player.x
       const fromY = player.y
@@ -226,9 +237,9 @@ export function usePlayer(map: WorldMap | null, options: PlayerOptions = {}): Pl
       window.removeEventListener('keyup', onKeyUp)
       window.removeEventListener('blur', release)
       document.removeEventListener('visibilitychange', release)
-      keys.clear()
+      release()
     }
   }, [map])
 
-  return { body, tile }
+  return { body, tile, setAnalog }
 }

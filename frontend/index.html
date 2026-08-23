@@ -3,7 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover is what makes env(safe-area-inset-*) non-zero, so the
+         on-screen stick clears the home indicator. Deliberately no
+         user-scalable=no: it fails WCAG 1.4.4, iOS has ignored it since iOS 10,
+         and the double-tap zoom it is usually added for is handled by
+         touch-action on the two elements that need it. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#0a0e1a" />
     <meta name="description" content="Turn course material into playable learning worlds." />
     <link rel="preconnect" href="https://fonts.googleapis.com" />

@@ -61,6 +61,8 @@ import { BackLink } from '../nav/BackLink'
 import { navigate } from '../nav/router'
 import { FIXTURE_HREF, hrefFor } from '../nav/routes'
 import type { FixtureBundle } from '../nav/routes'
+import { TouchControls } from './TouchControls'
+import { useCoarsePointer } from './useCoarsePointer'
 import { usePlayer } from './usePlayer'
 import { portalArt } from './vocabulary'
 import { WorldCanvas } from './WorldCanvas'
@@ -474,6 +476,7 @@ export function WorldExperience({ worldId, bundle }: WorldExperienceProps) {
   }, [map, openPortal])
 
   const player = usePlayer(map, { enabled: openPortal === null })
+  const coarse = useCoarsePointer()
 
   /**
    * A hotspot, not a single tile: at 5.4 tiles/s a one-tile target is genuinely
@@ -749,7 +752,7 @@ export function WorldExperience({ worldId, bundle }: WorldExperienceProps) {
   const clearedCount = gates.filter((portal) => cleared.has(portal.kind)).length
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-background">
+    <div className="relative h-dvh w-full overflow-hidden bg-background">
       <WorldCanvas map={map} player={player.body} cleared={cleared} activePortal={portalHere?.kind ?? null} />
 
       {/* HUD. Hidden while a portal is open: the novel shell carries its own
@@ -783,7 +786,7 @@ export function WorldExperience({ worldId, bundle }: WorldExperienceProps) {
                 to see it without hunting, so it sits in the card everyone is
                 already reading and carries its own keyboard hint. */}
             <a
-              className="ml-auto flex items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-xs font-black text-ink-muted transition hover:border-white/40 hover:bg-white/10 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              className="ml-auto flex min-h-11 touch-manipulation items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-xs font-black text-ink-muted transition hover:border-white/40 hover:bg-white/10 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               href={leaveHref}
             >
               <span aria-hidden="true">←</span>
@@ -839,18 +842,32 @@ export function WorldExperience({ worldId, bundle }: WorldExperienceProps) {
         {/* Full height, with the trail pushed to the bottom: the top-right
             corner is where the third gate stands, and a panel parked there hid
             it completely. */}
-        <div className="flex w-72 max-w-[45vw] flex-col items-end gap-3 self-stretch">
-          <div className="pointer-events-auto hidden rounded-2xl border border-white/10 bg-background/70 px-4 py-3 text-right text-xs font-semibold text-ink-muted backdrop-blur sm:block">
-            <p>
-              <kbd className="font-mono text-ink">WASD</kbd> / <kbd className="font-mono text-ink">arrows</kbd> to walk
-            </p>
-            <p className="mt-1">
-              <kbd className="font-mono text-ink">E</kbd> to enter a portal ·{' '}
-              <kbd className="font-mono text-ink">Esc</kbd> to close it
-            </p>
-            <p className="mt-1">
-              <kbd className="font-mono text-ink">Esc</kbd> out on the map to leave the world
-            </p>
+        {/* `hidden sm:flex`, not `sm:block` on the children alone: below `sm`
+            both children are hidden but the column still claimed its width,
+            crushing the HUD card into a tower on a 390px screen. */}
+        <div className="hidden w-72 max-w-[45vw] flex-col items-end gap-3 self-stretch sm:flex">
+          {/* Gated on the pointer, not on a breakpoint: `sm:` is a width
+              query, so a tablet in portrait used to be told to press WASD. */}
+          <div className="pointer-events-auto rounded-2xl border border-white/10 bg-background/70 px-4 py-3 text-right text-xs font-semibold text-ink-muted backdrop-blur">
+            {coarse ? (
+              <>
+                <p>Drag anywhere on the left to walk</p>
+                <p className="mt-1">Tap a gate, or the round button, to enter it</p>
+              </>
+            ) : (
+              <>
+                <p>
+                  <kbd className="font-mono text-ink">WASD</kbd> / <kbd className="font-mono text-ink">arrows</kbd> to walk
+                </p>
+                <p className="mt-1">
+                  <kbd className="font-mono text-ink">E</kbd> to enter a portal ·{' '}
+                  <kbd className="font-mono text-ink">Esc</kbd> to close it
+                </p>
+                <p className="mt-1">
+                  <kbd className="font-mono text-ink">Esc</kbd> out on the map to leave the world
+                </p>
+              </>
+            )}
           </div>
           {trail.length > 0 && (
             <div className="pointer-events-auto mt-auto hidden w-full md:block">
@@ -864,28 +881,32 @@ export function WorldExperience({ worldId, bundle }: WorldExperienceProps) {
         </div>
       </div>
 
-      {/* Walk-up prompt */}
+      {/* Walk-up prompt. On a coarse pointer it moves out of the bottom
+          centre, which is where the thumbstick lives — and once the pill is a
+          button it would happily eat a press meant for walking. */}
       {portalHere && !openPortal && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-8 flex justify-center px-4">
-          <div
-            className="stage-enter pointer-events-auto flex items-center gap-3 rounded-full border bg-background/85 px-5 py-3 shadow-2xl shadow-black/40 backdrop-blur"
-            style={{ borderColor: portalArt(portalHere.kind).glow }}
-          >
-            {/* A locked gate advertises no key: the prompt explains what is
-                behind the door without promising it opens. */}
-            {!portalHere.locked && (
-              <kbd className="rounded-lg border border-primary/50 bg-primary/15 px-2 py-1 font-mono text-sm font-black text-primary-soft">
-                E
-              </kbd>
-            )}
-            <span className="text-sm font-bold text-ink">
-              {portalHere.locked
-                ? portalHere.label
-                : `${cleared.has(portalHere.kind) ? 'Re-enter' : 'Enter'} ${portalHere.label}`}
-            </span>
-            <span className="text-xs font-semibold text-ink-muted">{portalHere.blurb}</span>
-          </div>
+        <div
+          className={`pointer-events-none absolute inset-x-0 flex px-4 ${
+            coarse ? 'bottom-48 justify-end pl-[52%]' : 'bottom-8 justify-center'
+          }`}
+        >
+          <PortalPrompt
+            portal={portalHere}
+            cleared={cleared.has(portalHere.kind)}
+            coarse={coarse}
+            onEnter={() => setOpenPortal(portalHere.kind)}
+          />
         </div>
+      )}
+
+      {/* The mobile control layer: the three things that were keyboard-only. */}
+      {coarse && (
+        <TouchControls
+          onVector={player.setAnalog}
+          portal={portalHere}
+          onEnter={() => portalHere && setOpenPortal(portalHere.kind)}
+          enabled={openPortal === null}
+        />
       )}
 
       {/* A portal is not a dialog. Each body renders its own novel shell over
@@ -1037,5 +1058,57 @@ export function ScenePanel({
       onCommit={onCommit}
       onContinue={() => onStage('diagnosis')}
     />
+  )
+}
+
+/**
+ * The pill that appears when the player is standing at a gate.
+ *
+ * It is a button when the gate opens and a plain div when it does not: a
+ * control that looks pressable and does nothing is a lie. Making it pressable
+ * also fixes the mouse, which until now had no clickable way into a gate — the
+ * only way in was the E key.
+ */
+function PortalPrompt({
+  portal,
+  cleared,
+  coarse,
+  onEnter,
+}: {
+  portal: PortalNode
+  cleared: boolean
+  coarse: boolean
+  onEnter: () => void
+}) {
+  const body = (
+    <>
+      {/* A locked gate advertises no key, and on touch there is no key to
+          advertise either — the action button carries that. */}
+      {!portal.locked && !coarse && (
+        <kbd className="rounded-lg border border-primary/50 bg-primary/15 px-2 py-1 font-mono text-sm font-black text-primary-soft">
+          E
+        </kbd>
+      )}
+      <span className="text-sm font-bold text-ink">
+        {portal.locked ? portal.label : `${cleared ? 'Re-enter' : 'Enter'} ${portal.label}`}
+      </span>
+      <span className="hidden text-xs font-semibold text-ink-muted sm:inline">{portal.blurb}</span>
+    </>
+  )
+  const shell =
+    'stage-enter pointer-events-auto flex min-h-12 touch-manipulation items-center gap-3 rounded-full border bg-background/85 px-5 py-3 shadow-2xl shadow-black/40 backdrop-blur'
+  const style = { borderColor: portalArt(portal.kind).glow }
+
+  if (portal.locked) {
+    return (
+      <div className={shell} style={style}>
+        {body}
+      </div>
+    )
+  }
+  return (
+    <button type="button" className={shell} style={style} onClick={onEnter}>
+      {body}
+    </button>
   )
 }
