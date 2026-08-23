@@ -75,7 +75,6 @@ export function TouchJoystick({ onVector, enabled, className = '' }: TouchJoysti
 
   const up = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.pointerId !== owner.current) return
-    if (knobRef.current) knobRef.current.style.transform = 'translate3d(0, 0, 0)'
     stop()
   }
 
@@ -102,10 +101,17 @@ export function TouchJoystick({ onVector, enabled, className = '' }: TouchJoysti
           style={{ left: ring.x, top: ring.y }}
         >
           <div className="absolute inset-3 rounded-full border border-secondary/25" />
+          {/*
+            No `transform` in the style prop, deliberately. This component
+            re-renders whenever the world does — which is every time the player
+            crosses a tile — and React would reapply the prop and snap the knob
+            back to the centre mid-drag. The pointermove handler is the only
+            owner of this transform; a fresh gesture mounts a fresh knob,
+            because the ring unmounts on release.
+          */}
           <div
             ref={knobRef}
             className="h-14 w-14 rounded-full border border-white/40 bg-secondary/70 shadow-[0_0_18px_rgba(67,217,196,0.45)]"
-            style={{ transform: 'translate3d(0, 0, 0)' }}
           />
         </div>
       )}
