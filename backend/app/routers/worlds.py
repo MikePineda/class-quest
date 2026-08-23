@@ -9,6 +9,7 @@ from app import models, schemas
 from app.db import get_db
 from app.deps import current_user, world_and_membership
 from app.ids import new_id, utc_now_iso
+from app.ratelimit import RateLimit
 from app.services import explain, progress, scoring, socratic
 
 router = APIRouter(prefix="/worlds", tags=["worlds"])
@@ -183,7 +184,14 @@ def get_progress(
     )
 
 
-@router.post("/{world_id}/explain", response_model=schemas.ExplainOut)
+@router.post(
+    "/{world_id}/explain",
+    response_model=schemas.ExplainOut,
+    # One model call per submission. Per account, because the address is shared
+    # by everyone in the room.
+    dependencies=[Depends(RateLimit("explain", by="user"))],
+    responses={429: {"description": "Too many submissions from this account"}},
+)
 def explain_concept(
     body: schemas.ExplainIn,
     wsm: tuple = Depends(world_and_membership),
@@ -240,7 +248,12 @@ def explain_concept(
     )
 
 
-@router.post("/{world_id}/explain/turn", response_model=schemas.ExplainChatOut)
+@router.post(
+    "/{world_id}/explain/turn",
+    response_model=schemas.ExplainChatOut,
+    dependencies=[Depends(RateLimit("explain", by="user"))],
+    responses={429: {"description": "Too many turns from this account"}},
+)
 def explain_turn(
     body: schemas.ExplainChatIn,
     wsm: tuple = Depends(world_and_membership),

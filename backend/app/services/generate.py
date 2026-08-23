@@ -31,6 +31,11 @@ class GenerationError(Exception):
     producing a document that validates."""
 
 
+class GeneratorBusy(Exception):
+    """Every generation slot is taken. The caller decides what to tell the
+    learner; nothing has been started."""
+
+
 # --------------------------------------------------------------- in-flight
 
 
@@ -38,12 +43,37 @@ _inflight: set[str] = set()
 _inflight_lock = threading.Lock()
 
 
+def running_count() -> int:
+    """How many pipelines are in flight right now."""
+    with _inflight_lock:
+        return len(_inflight)
+
+
+def has_capacity() -> bool:
+    """Whether another pipeline could start this instant.
+
+    Advisory: two callers can both read True and one of them still loses the
+    race in `start_pipeline`. It exists so the expensive path (reading and
+    parsing an upload) can be refused cheaply, not as the lock itself.
+    """
+    return running_count() < settings.max_concurrent_generations
+
+
 def start_pipeline(server_id: str) -> bool:
     """Fire the pipeline in a daemon thread. False (no-op) if this server is
-    already being generated."""
+    already being generated; `GeneratorBusy` if every slot is taken.
+
+    The cap is the real one — a public sign-up page with an unbounded number of
+    generation threads is an unbounded number of concurrent model calls, on one
+    small ARM box with one SQLite writer.
+    """
     with _inflight_lock:
         if server_id in _inflight:
             return False
+        if len(_inflight) >= settings.max_concurrent_generations:
+            raise GeneratorBusy(
+                f"{len(_inflight)} generations already running"
+            )
         _inflight.add(server_id)
 
     threading.Thread(target=_run_and_release, args=(server_id,), daemon=True).start()
