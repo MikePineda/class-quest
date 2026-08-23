@@ -1,14 +1,13 @@
 /**
- * The way in. `/world` used to drop straight into the bundled fixture, so the
- * only route to a real generated world was typing `/world/<id>` by hand. This
- * lists what the signed-in learner can actually walk.
+ * Every world the learner can walk, across every class.
  *
- * It is a utility screen on purpose: the polished navigation lives in the
- * server hub, which somebody else owns. Everything here is either a link to a
- * world or an honest sentence about why there is none.
+ * Nothing links here any more -- a server card opens `/servers/<id>`, which is
+ * the polished route and shows one class properly. This is the flat view over
+ * all of them, which the server screen cannot be, and the address is still
+ * `/world` so the bundled-world links keep working.
  *
- * The bundled fixture is offered on every state, including the failures: if the
- * API is down mid-pitch it is the one thing still guaranteed to walk.
+ * The bundled worlds are offered on every state, including the failures: if the
+ * API is down mid-pitch they are the one thing still guaranteed to walk.
  */
 
 import { useEffect, useState } from 'react'
