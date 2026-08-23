@@ -35,7 +35,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, ApiError } from '../api/client'
-import type { Concept, CourseGraph, ExplainOut, ExplainTurn } from '../api/types'
+import type { Concept, CourseGraph, ExplainOut, ExplainTurn, FixtureBundleName } from '../api/types'
 import type { ChatState } from './explainChat'
 import {
   appendLearner,
@@ -64,9 +64,24 @@ const PATIENCE_MS = 5000
  */
 const STUDENT_NAME = 'The Student'
 
+/**
+ * Where a turn is graded.
+ *
+ * This used to be `worldId: string | null`, and the null branch was a dead end
+ * that told the learner the demo could not answer. It is a union now because
+ * the two cases are two endpoints, not one endpoint and an absence: a real
+ * world grades against its own row, the bundled world grades against
+ * `/demo/explain/turn`, and the only thing that differs downstream is that the
+ * demo awards nothing. Anything that reads `kind` has to handle both, which is
+ * the point — a third dead end cannot be added by accident.
+ */
+export type ExplainTarget =
+  | { kind: 'world'; worldId: string }
+  | { kind: 'demo'; bundle: FixtureBundleName }
+
 export interface ExplainPanelProps {
-  /** Null on the bundled demo world, which has no server behind it. */
-  worldId: string | null
+  /** Which endpoint grades a turn. See `ExplainTarget`. */
+  target: ExplainTarget
   graph: CourseGraph
   /** Concepts already explained, so the panel opens on a fresh one. */
   explained: ReadonlySet<string>
@@ -77,7 +92,7 @@ export interface ExplainPanelProps {
   onClose: () => void
 }
 
-export function ExplainPanel({ worldId, graph, explained, xp = null, onCleared, onClose }: ExplainPanelProps) {
+export function ExplainPanel({ target, graph, explained, xp = null, onCleared, onClose }: ExplainPanelProps) {
   const [pickedId, setPickedId] = useState<string | null>(null)
   const opening = firstUnexplained(graph.concepts, explained)
   const concept = graph.concepts.find((candidate) => candidate.id === pickedId) ?? opening
@@ -109,7 +124,7 @@ export function ExplainPanel({ worldId, graph, explained, xp = null, onCleared, 
       concept={concept}
       concepts={graph.concepts}
       explained={explained}
-      worldId={worldId}
+      target={target}
       xp={xp}
       onPick={setPickedId}
       onCleared={onCleared}
@@ -122,7 +137,7 @@ function Conversation({
   concept,
   concepts,
   explained,
-  worldId,
+  target,
   xp,
   onPick,
   onCleared,
@@ -131,7 +146,7 @@ function Conversation({
   concept: Concept
   concepts: Concept[]
   explained: ReadonlySet<string>
-  worldId: string | null
+  target: ExplainTarget
   xp: number | null
   onPick: (id: string) => void
   onCleared: (result: ExplainOut) => void
@@ -148,23 +163,29 @@ function Conversation({
   const check = canSend(chat, draft)
   const started = chat.turns.length > 1
 
-  /** Post a conversation exactly as it stands. Retrying passes the same value. */
+  /**
+   * Post a conversation exactly as it stands. Retrying passes the same value.
+   *
+   * Both endpoints take the same body and return the same shape, so the target
+   * only decides which one is called: everything below this line is identical
+   * whether or not there is a server behind the world.
+   */
   const post = useCallback(
     (state: ChatState) => {
-      if (!worldId) {
-        setFailure('The demo world has no server behind it, so the student cannot answer here.')
-        return
-      }
+      const body = chatBody(state)
       setSending(true)
       setSlow(false)
       setFailure(null)
-      api
-        .explainTurn(worldId, chatBody(state))
-        .then((reply) => setChat(applyReply(state, reply)))
+      const reply =
+        target.kind === 'world'
+          ? api.explainTurn(target.worldId, body)
+          : api.demoExplainTurn({ ...body, bundle: target.bundle })
+      reply
+        .then((answer) => setChat(applyReply(state, answer)))
         .catch((error: unknown) => setFailure(describeFailure(error)))
         .then(() => setSending(false))
     },
-    [worldId],
+    [target],
   )
 
   const send = useCallback(() => {
@@ -466,6 +487,11 @@ function describeFailure(error: unknown): string {
       return 'The student could not answer just now. Nothing you wrote was lost — try again.'
     }
     if (error.status === 401) return 'You are signed out, so this could not be saved. Sign in and try again.'
+    // Reachable since the public link went out: every grading endpoint is rate
+    // limited. Nothing was lost, so the wording is a wait, not a failure.
+    if (error.status === 429) {
+      return 'That was a lot of messages at once. Give it a few seconds, then send it again.'
+    }
     if (error.status === 409) return 'This world is not ready yet.'
     return error.message
   }
