@@ -258,7 +258,10 @@ export function VisualNovelShell({
                   })}
                 </div>
               )}
-              <span className="font-hud text-[11px] text-ink-muted" aria-hidden="true">
+              {/* Hidden below `sm`: the header is one non-wrapping row, and
+                  at 390px this counter and the XP pill together truncated the
+                  title to almost nothing. Both numbers are in the world HUD. */}
+              <span className="hidden font-hud text-[11px] text-ink-muted sm:inline" aria-hidden="true">
                 {pips.done}/{pips.total}
               </span>
             </div>
@@ -266,7 +269,7 @@ export function VisualNovelShell({
 
           {typeof xp === 'number' && (
             <span
-              className="rounded-full border border-primary/35 bg-primary/10 px-3 py-1 font-hud text-[11px] text-primary-soft"
+              className="hidden rounded-full border border-primary/35 bg-primary/10 px-3 py-1 font-hud text-[11px] text-primary-soft sm:inline"
               aria-label={`${xp} experience points in this world`}
               aria-live="polite"
             >
@@ -274,7 +277,7 @@ export function VisualNovelShell({
             </span>
           )}
 
-          <button type="button" className="button-secondary" onClick={onClose}>
+          <button type="button" className="button-secondary shrink-0 touch-manipulation" onClick={onClose}>
             {closeLabel}
           </button>
         </header>
@@ -284,7 +287,9 @@ export function VisualNovelShell({
         <div
           ref={panelRef}
           tabIndex={-1}
-          className="min-h-0 flex-1 overflow-y-auto outline-none"
+          // `overscroll-contain` so reaching the end of a long page does not
+          // rubber-band the document behind the glass.
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain outline-none"
         >
           <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-6 sm:px-8">
             {illustration && (
