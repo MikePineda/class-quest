@@ -70,7 +70,16 @@ class Limiter:
 
     Keys are unbounded in principle — every IP that ever calls gets an entry —
     so a full bucket is dropped once the table grows past `max_keys`. Dropping
-    a *full* bucket loses nothing: a fresh key starts full anyway.
+    a *full* bucket loses nothing: a fresh key starts full anyway. Only a
+    request that is *allowed* can add a key, so a refused caller cannot grow
+    the table at all.
+
+    The sweep is linear and runs on any allowed request once the table is over
+    the cap, so twenty thousand addresses all actively spending at once would
+    mean a twenty-thousand-entry pass per request. That is a real ceiling and
+    it is far above anything this deployment will see; the endpoint with no
+    account behind it has a global limiter in front of it for exactly the case
+    where it is not.
     """
 
     def __init__(self, rule: Rule, *, max_keys: int = 20_000) -> None:
