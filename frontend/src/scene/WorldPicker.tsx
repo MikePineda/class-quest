@@ -13,10 +13,11 @@
 
 import { useEffect, useState } from 'react'
 import { api, ApiError } from '../api/client'
-import type { GenerationStatus, ServerSummary, WorldSummary } from '../api/types'
-
-/** `/world` with this flag walks the fixture; bare `/world` shows this picker. */
-export const FIXTURE_HREF = '/world?demo=1'
+import type { ServerSummary, WorldSummary } from '../api/types'
+import { statusTone } from '../foundation/status'
+import { WorldList } from '../foundation/WorldList'
+import { BackLink } from '../nav/BackLink'
+import { FIXTURE_HREF, OVERFITTING_HREF } from '../nav/routes'
 
 interface Group {
   server: ServerSummary
@@ -41,15 +42,14 @@ function describe(error: unknown): { message: string; needsSignIn: boolean } {
   return { message: 'The ClassQuest API could not be reached. Check the connection and try again.', needsSignIn: false }
 }
 
-const statusTone: Record<GenerationStatus, string> = {
-  ready: 'text-secondary',
-  failed: 'text-error',
-  pending: 'text-primary-soft',
-  processing: 'text-primary-soft',
-}
-
 export function WorldPicker() {
-  const [state, setState] = useState<State>({ status: 'loading' })
+  // Bumping this re-runs the fetch. A full page reload would work too, but it
+  // throws away the router's history and, on a phone, costs a cold start.
+  const [attempt, setAttempt] = useState(0)
+  // Keyed by the attempt it was fetched for, so a retry reads as "loading"
+  // during render rather than through a setState inside the effect.
+  const [fetched, setFetched] = useState<{ attempt: number; value: State } | null>(null)
+  const state: State = fetched?.attempt === attempt ? fetched.value : { status: 'loading' }
 
   useEffect(() => {
     let cancelled = false
@@ -68,15 +68,15 @@ export function WorldPicker() {
             }
           }),
         )
-        if (!cancelled) setState({ status: 'ready', groups })
+        if (!cancelled) setFetched({ attempt, value: { status: 'ready', groups } })
       })
       .catch((error: unknown) => {
-        if (!cancelled) setState({ status: 'error', ...describe(error) })
+        if (!cancelled) setFetched({ attempt, value: { status: 'error', ...describe(error) } })
       })
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [attempt])
 
   const worldCount =
     state.status === 'ready' ? state.groups.reduce((sum, group) => sum + group.worlds.length, 0) : 0
@@ -85,7 +85,10 @@ export function WorldPicker() {
     <main className="min-h-screen bg-app-grid px-4 py-10 sm:px-6 lg:py-14">
       <div className="mx-auto w-full max-w-3xl">
         <header>
-          <p className="eyebrow">Pick a world</p>
+          {/* The happy path used to be the one state with no way home: if you
+              had worlds, every link on the page went deeper. */}
+          <BackLink to="/" className="-ml-2">Your servers</BackLink>
+          <p className="eyebrow mt-3">Pick a world</p>
           <h1 className="mt-2 text-3xl font-black tracking-tight">Which world do you want to walk?</h1>
           <p className="mt-3 text-ink-muted">
             Every world that finished generating is listed here, grouped by its server.
@@ -93,14 +96,19 @@ export function WorldPicker() {
         </header>
 
         <section className="mt-8 rounded-2xl border border-primary/25 bg-surface p-5">
-          <p className="eyebrow">Offline demo</p>
-          <h2 className="mt-2 font-bold text-ink">Overfitting — bundled fixture</h2>
+          <p className="eyebrow">Bundled worlds</p>
+          <h2 className="mt-2 font-bold text-ink">Ship with the app, need no API</h2>
           <p className="mt-1 text-sm text-ink-muted">
-            Ships with the app and needs no API. Use it if the network is not cooperating.
+            Two hand-written worlds compiled into the page. Use them if the network is not cooperating.
           </p>
-          <a className="button-primary mt-4" href={FIXTURE_HREF}>
-            Walk the demo world
-          </a>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <a className="button-primary" href={FIXTURE_HREF}>
+              Walk Python basics
+            </a>
+            <a className="button-secondary" href={OVERFITTING_HREF}>
+              Walk Overfitting
+            </a>
+          </div>
         </section>
 
         <section className="mt-8">
@@ -121,7 +129,7 @@ export function WorldPicker() {
                     Sign in
                   </a>
                 ) : (
-                  <button type="button" className="button-secondary" onClick={() => window.location.reload()}>
+                  <button type="button" className="button-secondary" onClick={() => setAttempt((n) => n + 1)}>
                     Try again
                   </button>
                 )}
@@ -189,80 +197,10 @@ function ServerGroup({ group }: { group: Group }) {
       )}
 
       {group.worlds.length > 0 && (
-        <ul className="mt-4 space-y-2">
-          {group.worlds.map((world) => (
-            <li key={world.id}>
-              <WorldRow world={world} />
-            </li>
-          ))}
-        </ul>
+        <div className="mt-4">
+          <WorldList worlds={group.worlds} />
+        </div>
       )}
     </section>
-  )
-}
-
-/**
- * What the learner has actually done here, in the server's own numbers.
- *
- * `my_completion` is scenes attempted over scenes, and attempting is not
- * getting it right — so this says "walked", never "mastered". Mastery lives in
- * the world, where the answers are.
- */
-function WorldProgress({ world }: { world: WorldSummary }) {
-  const walked = Math.round(Math.max(0, Math.min(1, world.my_completion)) * 100)
-  if (world.my_xp <= 0 && walked <= 0) {
-    return <span className="text-xs font-bold text-ink-muted">Not started</span>
-  }
-  return (
-    <span className="flex items-center gap-2 text-xs font-bold text-ink-muted">
-      <span className="hidden h-1.5 w-16 overflow-hidden rounded-full bg-white/10 sm:block">
-        <span className="block h-full rounded-full bg-secondary" style={{ width: `${walked}%` }} />
-      </span>
-      <span>{walked}% walked</span>
-      {world.my_xp > 0 && (
-        <>
-          <span aria-hidden="true">·</span>
-          <span className="text-primary">{world.my_xp} XP</span>
-        </>
-      )}
-    </span>
-  )
-}
-
-function WorldRow({ world }: { world: WorldSummary }) {
-  // A world that is still generating has no progress to report, so there the
-  // generation status is the only thing worth saying.
-  const badge =
-    world.status === 'ready' ? (
-      <WorldProgress world={world} />
-    ) : (
-      <span className={`text-xs font-extrabold uppercase tracking-[0.12em] ${statusTone[world.status]}`}>
-        {world.status}
-      </span>
-    )
-  const title = (
-    <span className="text-sm font-bold text-ink">
-      {world.idx + 1}. {world.title}
-    </span>
-  )
-
-  // Only a ready world has a quest to lay out, so only a ready world is a link.
-  if (world.status !== 'ready') {
-    return (
-      <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-surface-high/50 px-4 py-3 opacity-60">
-        {title}
-        {badge}
-      </div>
-    )
-  }
-
-  return (
-    <a
-      className="flex items-center justify-between gap-3 rounded-xl border border-white/12 bg-surface-high px-4 py-3 transition hover:border-secondary/50 hover:bg-surface-highest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-      href={`/world/${encodeURIComponent(world.id)}`}
-    >
-      {title}
-      {badge}
-    </a>
   )
 }
