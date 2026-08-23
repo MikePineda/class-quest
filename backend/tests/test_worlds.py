@@ -10,7 +10,7 @@ from .helpers import make_ready_world
 
 def _register(client, email="a@example.com", name="A"):
     r = client.post("/auth/register", json={
-        "email": email, "password": "password123", "display_name": name,
+        "email": email, "password": "thistle marmalade rowboat", "display_name": name,
     })
     assert r.status_code == 201, r.text
     return r.json()["token"]

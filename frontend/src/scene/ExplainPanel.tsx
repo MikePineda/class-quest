@@ -48,6 +48,7 @@ import {
   startChat,
   stuckLabel,
 } from './explainChat'
+import { useCoarsePointer } from './useCoarsePointer'
 import { VisualNovelShell } from './vn'
 import type { VnProgress } from './vn'
 
@@ -136,6 +137,7 @@ function Conversation({
   onCleared: (result: ExplainOut) => void
   onClose: () => void
 }) {
+  const coarse = useCoarsePointer()
   const [chat, setChat] = useState<ChatState>(() => startChat(concept))
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
@@ -228,7 +230,7 @@ function Conversation({
       // A retyped line every time the meter moves is a distraction; the student
       // types while they are actually saying something new.
       typeDialogue={!sending}
-      footerHint={done ? undefined : 'Enter sends · Shift+Enter starts a new line'}
+      footerHint={done ? undefined : coarse ? 'Tap Send when you are done' : 'Enter sends · Shift+Enter starts a new line'}
       onClose={onClose}
       closeLabel="Back to the hub"
     >
@@ -302,6 +304,13 @@ function Conversation({
             disabled={sending}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
+              // A phone keyboard has no Shift+Enter, so on touch this shortcut
+              // meant the learner could never write a second paragraph and
+              // every Return posted a half-finished answer.
+              if (coarse) return
+              // IME composition commits with Enter; sending there would post
+              // mid-word for anyone typing Japanese, Chinese or Korean.
+              if (event.nativeEvent.isComposing) return
               if (event.key !== 'Enter' || event.shiftKey) return
               event.preventDefault()
               send()
@@ -314,7 +323,9 @@ function Conversation({
                   ? `Say at least ${check.charsNeeded} characters so the student has something to work with.`
                   : sending
                     ? 'Waiting on the student…'
-                    : 'Enter to send · Shift+Enter for a new line')}
+                    : coarse
+                      ? 'Tap Send when you are done.'
+                      : 'Enter to send · Shift+Enter for a new line')}
             </p>
             <button type="button" className="button-primary" onClick={send} disabled={!check.ok || sending}>
               {sending ? 'Sending…' : 'Send'}

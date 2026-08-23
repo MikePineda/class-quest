@@ -5,6 +5,7 @@ import { AnswerChoices } from './AnswerChoices'
 import { ConceptTrail } from './ConceptTrail'
 import { findMisconception, resolveDemoEncounter } from './demoData'
 import { Brand } from '../foundation/Brand'
+import { BackLink } from '../nav/BackLink'
 
 type DemoPhase = 'intro' | 'prediction' | 'diagnosis' | 'source' | 'transfer' | 'result'
 
@@ -111,9 +112,14 @@ export function DemoExperience() {
           <p className="eyebrow text-error">Quest unavailable</p>
           <h1 className="mt-2 text-2xl font-black">The evidence trail could not be loaded.</h1>
           <p className="mt-3 text-ink-muted">{resolution.error}</p>
-          <button className={`${primaryButton} mt-6`} onClick={() => window.location.reload()}>
-            Restart demo
-          </button>
+          <div className="mt-6 flex flex-wrap items-center gap-3">
+            {/* The fixture is compiled in, so a throw here throws again after a
+                reload. Without a second option this was a genuine dead end. */}
+            <button className={primaryButton} onClick={() => window.location.reload()}>
+              Restart demo
+            </button>
+            <BackLink to="/">Leave the demo</BackLink>
+          </div>
         </section>
       </main>
     )
@@ -141,6 +147,9 @@ export function DemoExperience() {
                 Restart
               </button>
             )}
+            {/* This file used to contain no links at all, and it is the first
+                thing a visitor with no account clicks. */}
+            <BackLink to="/">Leave the demo</BackLink>
           </div>
         </div>
       </header>

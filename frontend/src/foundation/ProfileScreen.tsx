@@ -3,6 +3,7 @@ import { api } from '../api/client'
 import type { Role, User } from '../api/types'
 import { readableError } from './errors'
 import { Brand } from './Brand'
+import { BackLink } from '../nav/BackLink'
 
 interface ProfileScreenProps {
   user: User
@@ -35,7 +36,7 @@ export function ProfileScreen({ user, onSaved, onSignOut }: ProfileScreenProps) 
   return (
     <main className="min-h-screen bg-app-grid px-4 py-8 sm:grid sm:place-items-center">
       <section className="cq-panel w-full max-w-3xl overflow-hidden">
-        <header className="flex items-center justify-between border-b border-white/10 bg-background-raised/80 px-6 py-4 sm:px-10"><Brand compact subtitle="Hero setup" /><button type="button" className="button-secondary min-h-9 px-3 py-1.5 text-xs" onClick={onSignOut}>Sign out</button></header>
+        <header className="flex items-center justify-between gap-3 border-b border-white/10 bg-background-raised/80 px-6 py-4 sm:px-10"><Brand compact subtitle="Hero setup" /><div className="flex items-center gap-2">{/* Saving and signing out were the only two ways off this screen. */}<BackLink to="/">Your servers</BackLink><button type="button" className="button-secondary min-h-9 px-3 py-1.5 text-xs" onClick={onSignOut}>Sign out</button></div></header>
         <div className="p-6 sm:p-10">
         <div className="flex items-start justify-between gap-4">
           <div><p className="eyebrow">Hero profile · one quick setup</p><h1 className="mt-3 text-3xl font-extrabold">Make ClassQuest fit you.</h1><p className="mt-3 max-w-xl leading-7 text-ink-muted">Choose your path so future questions and worlds can meet you at the right level.</p></div>
