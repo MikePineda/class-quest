@@ -966,7 +966,10 @@ export function WorldExperience({ worldId, bundle }: WorldExperienceProps) {
             onClose={close}
           />
         ) : openNode.kind === 'storybook' ? (
-          <StorybookPanel graph={graph} readIds={read} onRead={markRead} onClose={close} />
+          // The quest is where the narration and the rooms live: it is not
+          // walkable since the hub redesign, so this is the only place the
+          // story the generator wrote is ever read.
+          <StorybookPanel quest={game} graph={graph} readIds={read} onRead={markRead} onClose={close} />
         ) : openNode.kind === 'sealed' ? (
           // Reachable now: the fourth door opens once the other three are
           // cleared. It summarises and never awards — the XP is the server's.
