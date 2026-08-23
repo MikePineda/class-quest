@@ -24,6 +24,7 @@ async def _lifespan(app: FastAPI):
         from app.services import seed
 
         seed.ensure_demo_server()
+        seed.ensure_demo_cohort()
     yield
 
 

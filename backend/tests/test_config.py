@@ -38,3 +38,16 @@ def test_cors_origins_falls_back_to_the_dev_default(monkeypatch):
 @pytest.mark.parametrize("value,expected", [("", False), ("sk-abc", True)])
 def test_llm_enabled_follows_the_key(monkeypatch, value, expected):
     assert _settings(monkeypatch, LLM_API_KEY=value).llm_enabled is expected
+
+
+def test_demo_cohort_server_id_defaults_to_empty(monkeypatch):
+    monkeypatch.delenv("DEMO_COHORT_SERVER_ID", raising=False)
+    assert _settings(monkeypatch).demo_cohort_server_id == ""
+
+
+def test_demo_cohort_server_id_is_a_plain_string(monkeypatch):
+    """A list/dict-typed setting is JSON-decoded by pydantic-settings before
+    any validator runs -- that is the failure mode that crash-looped prod."""
+    assert Settings.model_fields["demo_cohort_server_id"].annotation is str
+    s = _settings(monkeypatch, DEMO_COHORT_SERVER_ID="7f3a9c1b2d4e")
+    assert s.demo_cohort_server_id == "7f3a9c1b2d4e"

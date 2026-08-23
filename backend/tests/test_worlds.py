@@ -304,3 +304,141 @@ def test_explain_grader_unavailable_503(client, monkeypatch):
         headers=_auth(token),
     )
     assert r.status_code == 503
+
+
+# ------------------------------------------------------------ explain/turn
+
+# Three learner turns that walk the fixture student from 47 to a pass on the
+# bundled `overfitting` concept. Only the learner turns are ever scored, so the
+# `student` lines here stand in for whatever the server said last time.
+_CHAT = [
+    {"role": "learner",
+     "text": "Overfitting is when a model learns the training data too well."},
+    {"role": "student",
+     "text": "Wait — I thought 99 percent on training means roughly 99 percent on new data. "
+             "Why is that not right?"},
+    {"role": "learner",
+     "text": "The two scores decouple once the model starts fitting noise: training error "
+             "keeps falling while the error on new data rises, so a near perfect training "
+             "score with no validation check is a warning sign, not a result."},
+    {"role": "student",
+     "text": "Wait — I thought Overfitting means the data was dirty. Why is that not right?"},
+    {"role": "learner",
+     "text": "The data can be perfectly clean. Overfitting is about the model having enough "
+             "capacity to memorise whatever it is given, so it captures noise specific to "
+             "the training set."},
+]
+
+
+def _rows(world_id):
+    db = SessionLocal()
+    try:
+        return (
+            db.query(models.Explanation).filter_by(world_id=world_id).count(),
+            db.query(models.Attempt).filter_by(world_id=world_id, archetype="explain").count(),
+        )
+    finally:
+        db.close()
+
+
+def _turn(client, token, world_id, turns, concept=_CONCEPT):
+    return client.post(
+        f"/worlds/{world_id}/explain/turn",
+        json={"concept_id": concept, "turns": turns},
+        headers=_auth(token),
+    )
+
+
+def test_explain_turn_mid_conversation_writes_nothing(client):
+    token, _server_id, world_id = _setup(client)
+    r = _turn(client, token, world_id, _CHAT[:1])
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["done"] is False
+    assert body["result"] is None
+    assert body["question"]
+    assert body["targeted_misconception_id"] == "high_train_high_test"
+    assert 0 < body["understanding"] < 100
+    assert body["turns_remaining"] == 3
+
+    # Nothing is persisted until the student is done: no rows, no XP.
+    assert _rows(world_id) == (0, 0)
+    prog = client.get(f"/worlds/{world_id}/progress", headers=_auth(token)).json()
+    assert prog["xp"] == 0
+    assert prog["explanations"] == []
+
+
+def test_explain_turn_completed_conversation_awards_once(client):
+    token, _server_id, world_id = _setup(client)
+    r = _turn(client, token, world_id, _CHAT)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["done"] is True
+    assert body["question"] is None
+    assert body["turns_remaining"] == 0
+    result = body["result"]
+    assert result["verdict"] == "pass"
+    assert result["xp_awarded"] == 25
+    assert result["world_xp"] == 25
+    assert result["concept"]["id"] == _CONCEPT
+    assert body["understanding"] == result["score"]
+
+    assert _rows(world_id) == (1, 1)
+
+    db = SessionLocal()
+    try:
+        row = db.query(models.Explanation).filter_by(world_id=world_id).one()
+        assert "learner:" in row.text and "student:" in row.text
+        assert _CHAT[0]["text"] in row.text
+        assert row.score == result["score"] and row.verdict == "pass"
+    finally:
+        db.close()
+
+    # A second completed conversation on the same concept stores a second row
+    # but pays nothing.
+    r2 = _turn(client, token, world_id, _CHAT)
+    assert r2.status_code == 200
+    assert r2.json()["result"]["xp_awarded"] == 0
+    assert _rows(world_id) == (2, 2)
+
+
+def test_explain_turn_unknown_concept_404(client):
+    token, _server_id, world_id = _setup(client)
+    assert _turn(client, token, world_id, _CHAT, concept="not_a_concept").status_code == 404
+
+
+def test_explain_turn_not_ready_409(client):
+    token, _server_id, world_id = _setup(client)
+    db = SessionLocal()
+    try:
+        db.get(models.World, world_id).status = "processing"
+        db.commit()
+    finally:
+        db.close()
+    assert _turn(client, token, world_id, _CHAT[:1]).status_code == 409
+
+
+def test_explain_turn_rejects_bad_transcripts_422(client):
+    token, _server_id, world_id = _setup(client)
+    long_line = {"role": "learner", "text": "a" * 700}
+    cases = {
+        "too many turns": [dict(_CHAT[0]) for _ in range(13)],
+        "last turn is the student's": [_CHAT[0], _CHAT[1]],
+        "not enough learner text": [{"role": "learner", "text": "too short"}],
+        "one oversized turn": [{"role": "learner", "text": "a" * 1201}],
+        "transcript over the total cap": [long_line for _ in range(12)],
+    }
+    for name, turns in cases.items():
+        assert _turn(client, token, world_id, turns).status_code == 422, name
+    assert _rows(world_id) == (0, 0)
+
+
+def test_explain_turn_non_member_on_private_server_is_403(client):
+    db = SessionLocal()
+    try:
+        _owner, _server, world = _server_and_world(db, is_public=False)
+        world_id = world.id
+    finally:
+        db.close()
+    outsider = _register(client, email="out2@example.com", name="Out")
+    assert _turn(client, outsider, world_id, _CHAT[:1]).status_code == 403

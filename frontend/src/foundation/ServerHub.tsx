@@ -186,11 +186,11 @@ function JoinServerForm({ onJoined }: { onJoined: (server: ServerSummary) => voi
 function ServerCard({ server }: { server: ServerSummary }) {
   const statusColor = server.status === 'ready' ? 'text-secondary' : server.status === 'failed' ? 'text-error' : 'text-primary-soft'
   return (
-    <article className="rounded-lg border border-white/10 bg-surface-high/70 p-4 transition hover:border-white/20 hover:bg-surface-highest/80">
+    <a className="block rounded-lg border border-white/10 bg-surface-high/70 p-4 transition hover:border-white/20 hover:bg-surface-highest/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-offset-2 focus-visible:ring-offset-background" href="/world">
       <div className="flex items-start justify-between gap-3"><div><h3 className="font-bold text-ink">{server.name}</h3><p className="mt-1 line-clamp-2 text-sm text-ink-muted">{server.description || `${server.pet} guide · ${server.member_count} member${server.member_count === 1 ? '' : 's'}`}</p></div><span className={`text-xs font-extrabold uppercase tracking-[0.12em] ${statusColor}`}>{server.status}</span></div>
       <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-ink-muted"><span>{server.world_count} world{server.world_count === 1 ? '' : 's'}</span>{server.join_code && <><span aria-hidden="true">·</span><span>Code <strong className="font-hud text-[10px] tracking-[0.08em] text-ink">{server.join_code}</strong></span></>}</div>
       {server.error && <p className="mt-3 text-xs text-error">{server.error}</p>}
-    </article>
+    </a>
   )
 }
 
