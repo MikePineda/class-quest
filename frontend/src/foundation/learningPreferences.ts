@@ -1,23 +1,17 @@
-export type LearningMode = 'solo' | 'async_group' | 'live_group' | 'undecided'
 export type LearningGoal = 'understand' | 'assessment' | 'review' | 'confidence'
 export type SessionLength = 'quick' | 'focused' | 'ongoing'
 
 export interface LearningPreferences {
-  mode: LearningMode
   goal: LearningGoal
   sessionLength: SessionLength
 }
 
 export const DEFAULT_LEARNING_PREFERENCES: LearningPreferences = {
-  mode: 'solo',
   goal: 'understand',
   sessionLength: 'focused',
 }
 
 const keyFor = (userId: string): string => `classquest.learning-preferences.${userId}`
-
-const isMode = (value: unknown): value is LearningMode =>
-  value === 'solo' || value === 'async_group' || value === 'live_group' || value === 'undecided'
 
 const isGoal = (value: unknown): value is LearningGoal =>
   value === 'understand' || value === 'assessment' || value === 'review' || value === 'confidence'
@@ -33,10 +27,10 @@ export function loadLearningPreferences(userId: string): LearningPreferences {
     const parsed: unknown = JSON.parse(raw)
     if (!parsed || typeof parsed !== 'object') return DEFAULT_LEARNING_PREFERENCES
     const value = parsed as Record<string, unknown>
-    if (!isMode(value.mode) || !isGoal(value.goal) || !isSessionLength(value.sessionLength)) {
+    if (!isGoal(value.goal) || !isSessionLength(value.sessionLength)) {
       return DEFAULT_LEARNING_PREFERENCES
     }
-    return { mode: value.mode, goal: value.goal, sessionLength: value.sessionLength }
+    return { goal: value.goal, sessionLength: value.sessionLength }
   } catch {
     return DEFAULT_LEARNING_PREFERENCES
   }
