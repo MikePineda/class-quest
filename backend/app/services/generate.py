@@ -321,7 +321,7 @@ def gen_graph(world_title: str, segments_for_world: list[tuple[int, str]],
     except llm.FixtureMode:
         return _fixture_graph(world_title, all_segments)
     except (llm.LLMError, llm.LLMFormatError) as e:
-        raise GenerationError(f"graph: {e}") from e
+        raise GenerationError(str(e)) from e
 
     repaired, _notes = validators.autorepair_graph(raw, all_segments)
     errors = validators.validate_graph(repaired, all_segments)
@@ -330,11 +330,11 @@ def gen_graph(world_title: str, segments_for_world: list[tuple[int, str]],
         try:
             raw2 = llm.call_json(system, repair_user, max_tokens=8000, temperature=0.2)
         except (llm.LLMError, llm.LLMFormatError) as e:
-            raise GenerationError(f"graph: {'; '.join(errors[:3])}") from e
+            raise GenerationError("; ".join(errors[:3])) from e
         repaired, _notes = validators.autorepair_graph(raw2, all_segments)
         errors = validators.validate_graph(repaired, all_segments)
         if errors:
-            raise GenerationError(f"graph: {'; '.join(errors[:3])}")
+            raise GenerationError("; ".join(errors[:3]))
 
     repaired["graph_id"] = ids.artifact_id()
     repaired.setdefault("source", {})
@@ -353,7 +353,7 @@ def gen_quest(graph: dict, title: str, blurb: str) -> dict:
     except llm.FixtureMode:
         return _fixture_quest(graph, title)
     except (llm.LLMError, llm.LLMFormatError) as e:
-        raise GenerationError(f"quest: {e}") from e
+        raise GenerationError(str(e)) from e
 
     repaired, _notes = validators.autorepair_game(raw, graph)
     errors = validators.validate_game(repaired, graph)
@@ -362,11 +362,11 @@ def gen_quest(graph: dict, title: str, blurb: str) -> dict:
         try:
             raw2 = llm.call_json(system, repair_user, max_tokens=8000, temperature=0.3)
         except (llm.LLMError, llm.LLMFormatError) as e:
-            raise GenerationError(f"quest: {'; '.join(errors[:3])}") from e
+            raise GenerationError("; ".join(errors[:3])) from e
         repaired, _notes = validators.autorepair_game(raw2, graph)
         errors = validators.validate_game(repaired, graph)
         if errors:
-            raise GenerationError(f"quest: {'; '.join(errors[:3])}")
+            raise GenerationError("; ".join(errors[:3]))
 
     repaired["game_id"] = ids.artifact_id()
     repaired["graph_id"] = graph.get("graph_id")
@@ -383,7 +383,7 @@ def _noop_warn(_message: str) -> None:
 
 def _gauntlet_fallback_or_raise(quest, graph, on_warn, errors) -> dict:
     if quest is None:
-        raise GenerationError(f"gauntlet: {'; '.join(errors[:3])}")
+        raise GenerationError("; ".join(errors[:3]))
     on_warn(
         "gauntlet generation failed validation; falling back to derive_gauntlet: "
         + "; ".join(errors[:3])
@@ -488,7 +488,9 @@ def _run_world(server_id: str, world_id: str, all_segments: list[str]) -> bool:
             world.status = "failed"
             world.stage = None
             # Name the stage: "gauntlet: ..." is diagnosable from the API,
-            # a bare exception string sends you to the server logs.
+            # a bare exception string sends you to the server logs. The stage
+            # is added here and only here — the raisers used to prefix it too,
+            # which is where "graph: graph: ..." came from.
             world.error = f"{stage}: {e}"[:500]
             log_event(s, server_id, stage, f"{title}: {e}", world_id=world_id, level="error")
         return False

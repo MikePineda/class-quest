@@ -27,6 +27,27 @@ class LLMFormatError(Exception):
     """The model answered, but not with the JSON object we asked for."""
 
 
+def describe_api_error(error: Exception) -> str:
+    """One sentence, safe to show, for the handful of failures that actually
+    happen on a demo day.
+
+    Everything else falls through to the exception class name — still no JSON,
+    still no request id, and the full error is in the log line above the raise.
+    """
+    status = getattr(error, "status_code", None)
+    if status == 429:
+        return "the model is out of quota right now"
+    if status in (401, 403):
+        return "the model rejected our key"
+    if status is not None and 500 <= status < 600:
+        return "the model is having trouble right now"
+    if isinstance(error, anthropic.APITimeoutError):
+        return "the model took too long to answer"
+    if isinstance(error, anthropic.APIConnectionError):
+        return "the model could not be reached"
+    return type(error).__name__
+
+
 class LLMError(Exception):
     """Transport/API failure (timeout, connection, 4xx/5xx)."""
 
@@ -72,7 +93,11 @@ def _create(
     try:
         resp = client.messages.create(**kwargs)
     except anthropic.APIError as e:  # includes APIConnectionError / APITimeoutError
-        raise LLMError(f"{type(e).__name__}: {e}") from e
+        # The provider's own message is a JSON blob with a request id in it, and
+        # `World.error` is served straight to whoever opens the server. Log the
+        # whole thing, raise one sentence a learner can act on.
+        log.warning("llm call failed: %s: %s", type(e).__name__, e)
+        raise LLMError(describe_api_error(e)) from e
     latency_ms = int((time.perf_counter() - t0) * 1000)
 
     usage = getattr(resp, "usage", None)
