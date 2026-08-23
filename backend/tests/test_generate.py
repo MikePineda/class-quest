@@ -305,7 +305,9 @@ def test_gen_graph_raises_when_both_attempts_fail(monkeypatch, demo):
     with pytest.raises(generate.GenerationError) as ei:
         generate.gen_graph("Week 3", _world_segments(demo), demo.segments)
     assert len(calls) == 2
-    assert str(ei.value).startswith("graph:")
+    # Same rule as the quest: the stage is prefixed once, by `_generate_world`.
+    assert not str(ei.value).startswith("graph:")
+    assert "concepts" in str(ei.value)
 
 
 def test_gen_graph_uses_world_subrange_but_global_segment_ids(monkeypatch, demo):
@@ -368,7 +370,10 @@ def test_gen_quest_repairs_once_then_raises(monkeypatch, demo):
     with pytest.raises(generate.GenerationError) as ei:
         generate.gen_quest(graph, "T", "b")
     assert len(calls) == 2
-    assert str(ei.value).startswith("quest:")
+    # The stage is named once, by `_generate_world`, not here: this message is
+    # what gets that prefix, so a "quest:" in it would come out doubled.
+    assert not str(ei.value).startswith("quest:")
+    assert "chapters" in str(ei.value)
 
 
 def test_gen_gauntlet_happy_path(monkeypatch, demo):
@@ -660,3 +665,6 @@ def test_failed_world_error_names_the_stage(monkeypatch, demo):
         w = db.execute(select(World).where(World.server_id == server_id)).scalars().one()
         assert w.error.startswith("quest: "), w.error
         assert "boom" in w.error
+        # Exactly once. The stage used to be prefixed by the raiser as well as
+        # here, and the learner was shown "quest: quest: ...".
+        assert w.error.count("quest:") == 1, w.error
