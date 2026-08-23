@@ -15,9 +15,13 @@
  *   behind them, and a demo stand cannot tell an unbuilt feature from a broken
  *   one.
  *
- * Every control on this screen goes somewhere real: `/demo` is the bundled
- * encounter, the two forms are the live create/join endpoints, and each server
- * row is `/servers/{id}`.
+ * Every control that *looks* live goes somewhere real: the two forms are the
+ * create/join endpoints, and each server row is `/servers/{id}`. "Start a
+ * challenge" is the one card that goes nowhere, and it is the exception that
+ * proves the rule above rather than a hole in it — a card marked "Coming soon"
+ * is not silent about being unbuilt, which is the one thing that lets a stand
+ * tell it from a broken one. The `/demo` route it used to point at is
+ * untouched and still reachable by address.
  */
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { api } from '../api/client'
@@ -112,8 +116,8 @@ export function ServerHub({ user, onSignOut }: ServerHubProps) {
             <p className="eyebrow">Your learning hub</p>
             <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">Choose what to do next.</h1>
             <p className="mt-3 max-w-2xl text-ink-muted">
-              No mode lock-in. Start a challenge, create a world, join a server, or return to work already in
-              progress.
+              No mode lock-in. Create a world from your own material, join a server, or return to work already
+              in progress.
             </p>
           </div>
           <button className="button-secondary shrink-0" type="button" onClick={() => void loadServers()} disabled={loading}>
@@ -134,16 +138,16 @@ export function ServerHub({ user, onSignOut }: ServerHubProps) {
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <HubAction
               glyph="✦"
-              href="/demo"
               title="Start a challenge"
               description="One focused encounter from a built-in world. No server needed."
-              primary
+              comingSoon
             />
             <HubAction
               glyph="+"
               title="Create a server"
               description="Use notes, lectures, or files."
               onClick={() => openPanel('create')}
+              primary
             />
             <HubAction
               glyph="↗"
@@ -270,8 +274,11 @@ function TabButton({
 
 /**
  * One of the four things the hub offers. A link when the destination is an
- * address, a button when it moves focus on this page — never a div pretending
- * to be either.
+ * address, a button when it moves focus on this page, and a plain `div` when
+ * there is nothing yet — the div is the honest shape, not a compromise: with no
+ * href and no handler there is nothing for it to pretend to be, and unlike a
+ * disabled `<a>` it is not in the tab order promising a destination it lacks.
+ * The "Coming soon" pill is what keeps that from reading as broken.
  */
 function HubAction({
   glyph,
@@ -280,6 +287,7 @@ function HubAction({
   href,
   onClick,
   primary = false,
+  comingSoon = false,
 }: {
   glyph: string
   title: string
@@ -287,26 +295,43 @@ function HubAction({
   href?: string
   onClick?: () => void
   primary?: boolean
+  comingSoon?: boolean
 }) {
+  // A card that is not offered is never the loud one, whatever it was passed.
+  const loud = primary && !comingSoon
   // `justify-start`, not `between`: the grid already makes every card the
   // height of the tallest one, so spreading the two lines apart opened a gap
   // under three of the four titles.
-  const className = `group flex min-h-28 flex-col justify-start rounded-xl border p-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
-    primary
-      ? 'border-primary bg-primary text-[#1a1204] shadow-lg shadow-primary/10 hover:bg-primary-soft'
-      : 'border-white/10 bg-surface-high hover:border-secondary/50 hover:bg-surface-highest'
-  }`
+  const base = 'group flex min-h-28 flex-col justify-start rounded-xl border p-4 text-left'
+  const className = comingSoon
+    ? `${base} cursor-not-allowed border-white/10 bg-surface-high/50 opacity-60`
+    : `${base} transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+        loud
+          ? 'border-primary bg-primary text-[#1a1204] shadow-lg shadow-primary/10 hover:bg-primary-soft'
+          : 'border-white/10 bg-surface-high hover:border-secondary/50 hover:bg-surface-highest'
+      }`
   const content = (
     <>
-      <span className={`flex items-center gap-2 text-base font-black ${primary ? 'text-[#1a1204]' : 'text-ink'}`}>
-        <span aria-hidden="true" className={primary ? 'text-[#3b2b0f]' : 'text-secondary'}>
+      {/* `flex-wrap`: at the 4-up breakpoint the pill and the title together
+          overrun the card, and dropping the pill to its own line is the only
+          break that does not clip one of them. */}
+      <span className={`flex flex-wrap items-center gap-2 text-base font-black ${loud ? 'text-[#1a1204]' : 'text-ink'}`}>
+        <span aria-hidden="true" className={loud ? 'text-[#3b2b0f]' : 'text-secondary'}>
           {glyph}
         </span>
         {title}
+        {comingSoon && (
+          <span className="shrink-0 rounded-full border border-white/15 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.1em] text-ink-muted">
+            Coming soon
+          </span>
+        )}
       </span>
-      <span className={`mt-3 text-xs leading-5 ${primary ? 'text-[#3b2b0f]' : 'text-ink-muted'}`}>{description}</span>
+      <span className={`mt-3 text-xs leading-5 ${loud ? 'text-[#3b2b0f]' : 'text-ink-muted'}`}>{description}</span>
     </>
   )
+  if (comingSoon) {
+    return <div className={className}>{content}</div>
+  }
   return href ? (
     <a className={className} href={href}>
       {content}
