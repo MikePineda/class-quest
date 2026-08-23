@@ -18,7 +18,7 @@ public server join code `DEMO01`.
 | `backend/` | FastAPI + SQLite API. `app/routers` (HTTP), `app/services` (ingest, LLM, validation, generation) |
 | `frontend/` | Vite + React + TS + Tailwind. `src/api/` is the typed client; screens live above it |
 | `schema/` | The content contract (JSON Schema) + `validate.py` |
-| `fixtures/` | Hand-written demo content (overfitting) seeded as the public demo server |
+| `fixtures/` | Hand-written demo content (Python basics, overfitting), seeded as two public demo servers and compiled into the frontend |
 | `CONTRACTS.md` | API contract for the frontend, with JSON examples |
 | `docs/OPERATIONS.md` | **Deploy, environment, smoke tests, debugging — read this before touching prod** |
 | `docs/ATTRIBUTION.md` | Where the sprites come from, the licence terms, and how to re-cut them |
@@ -39,7 +39,9 @@ cd frontend && npm install && npm run dev
 docker compose up --build
 ```
 
-Demo login after first boot: `demo@classquest.app` / `demo1234`, public server join code `DEMO01`.
+Demo login after first boot: `demo@classquest.app` / `demo1234`, public server join codes `PY101A`
+(Programming Fundamentals) and `DEMO01` (Intro to ML). No account needed for the bundled worlds:
+`/world?demo=pybasics` and `/world?demo=overfitting` walk without touching the API.
 
 ## Tests and checks
 

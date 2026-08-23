@@ -2,10 +2,17 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Pull-to-refresh and rubber-band chaining both steal drags meant for the world. */
+html, body { overscroll-behavior: none; }
+
 body {
   @apply bg-background text-ink font-sans;
   min-width: 320px;
+  /* 100vh is the *large* viewport on iOS, so while the Safari toolbar is
+     showing the document is taller than the screen — and then a drag on the
+     canvas scrolls the page instead of steering. dvh is the visible one. */
   min-height: 100vh;
+  min-height: 100dvh;
   margin: 0;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;

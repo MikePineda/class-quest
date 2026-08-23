@@ -16,14 +16,22 @@
  * empty panel: a door that will not budge is honest, a door onto nothing is a
  * bug the audience can see.
  *
- * Three ways in. With a `worldId` it loads the learner's real world through
- * `api.getWorld` and builds the hub from `games.quest` (+ `games.gauntlet` and
- * `graph`, which is where misconceptions and source quotes live). Without one it
- * shows `WorldPicker`, because otherwise a generated world is only reachable by
- * typing its id into the address bar. `/world?demo=1` walks the bundled fixture,
- * the offline safety net for the pitch. The fixture is never used as a fallback
- * for a real world that failed to load: showing somebody else's course while
- * they asked for their own is worse than an honest error.
+ * Two ways in, and exactly one of the two props is always set. With a
+ * `worldId` it loads the learner's real world through `api.getWorld` and
+ * builds the hub from `games.quest` (+ `games.gauntlet` and `graph`, which is
+ * where misconceptions and source quotes live). With a `bundle` it walks a
+ * world compiled into the page — the offline safety net for the pitch, and the
+ * only thing a signed-out visitor can reach.
+ *
+ * The bundle is never used as a fallback for a real world that failed to load:
+ * showing somebody else's course while they asked for their own is worse than
+ * an honest error.
+ *
+ * `App` gives this component nothing but primitives, and must keep doing so.
+ * See the note on `portalSpecs` below, and the same warning in
+ * `docs/HANDOFF.md`: an unstable value reaching `WorldCanvas` reads as
+ * "movement is broken" *and* "the world never loads", and neither symptom
+ * points anywhere near the cause.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -38,7 +46,7 @@ import type {
   Scene,
   SceneProgress,
 } from '../api/types'
-import { fixtureGauntlet, fixtureGraph, fixtureQuest } from '../fixtures'
+import { bundleOf } from '../fixtures'
 import { WorldClosurePanel, useCohort } from './cohort'
 import { clearedPortals, closureOpen, worldCleared } from './gating'
 import { buildHub } from './hubgen'
@@ -57,11 +65,17 @@ import {
 } from './SceneStages'
 import type { Persistence, SceneOutcome, Stage } from './SceneStages'
 import type { Point, PortalKind, PortalNode, Rect, WorldMap } from './types'
+import { BackLink } from '../nav/BackLink'
+import { navigate } from '../nav/router'
+import { FIXTURE_HREF, hrefFor } from '../nav/routes'
+import type { FixtureBundle } from '../nav/routes'
+import { TouchControls } from './TouchControls'
+import { useCoarsePointer } from './useCoarsePointer'
 import { usePlayer } from './usePlayer'
 import { portalArt } from './vocabulary'
 import { WorldCanvas } from './WorldCanvas'
 import { WorldConceptTrail } from './WorldConceptTrail'
-import { FIXTURE_HREF, WorldPicker } from './WorldPicker'
+
 
 /**
  * `games.quest` is nullable: the backend persists a world whose generation only
@@ -81,7 +95,6 @@ type Load =
       /** `WorldDetail.server_id`. The handle for everything the class did. */
       serverId: string | null
     }
-  | { status: 'picker' }
   | { status: 'empty'; title: string }
   | { status: 'error'; message: string; needsSignIn: boolean }
 
@@ -95,14 +108,6 @@ const inRect = (r: Rect, t: Point): boolean =>
  * team wants per-world biomes back.
  */
 const HUB_BACKGROUND = 'cavern' as const
-
-/**
- * Where "leave" goes: the picker, which is the screen this world was chosen
- * from and the one that lists every other world. Navigation in this app is a
- * plain full page load — there is no router — so this is an `href`, and the
- * keyboard path below sets `window.location` rather than pushing history.
- */
-const LEAVE_HREF = '/world'
 
 /**
  * Everything the learner accumulates inside one world, carried in a single
@@ -206,33 +211,37 @@ function describe(error: unknown): { message: string; needsSignIn: boolean } {
 }
 
 export interface WorldExperienceProps {
-  /** Omitted means the picker (or the fixture, with `?demo` on the URL). */
+  /** A real generated world. Mutually exclusive with `bundle`. */
   worldId?: string
+  /**
+   * Walk a world compiled into the page instead. This is the signed-out path
+   * from the login screen, so it must never touch the API.
+   */
+  bundle?: FixtureBundle
 }
 
-export function WorldExperience({ worldId }: WorldExperienceProps) {
+export function WorldExperience({ worldId, bundle }: WorldExperienceProps) {
   // Keyed by the id it was fetched for: a different id reads as "loading"
   // during render rather than through a synchronous reset in the effect.
   const [fetched, setFetched] = useState<{ id: string | undefined; value: Load } | null>(null)
-  // Read once per render: the router is the URL, so a flag on it is the only
-  // state that survives the full page load a link causes.
-  const walksFixture = new URLSearchParams(window.location.search).has('demo')
+  // Which bundle, if any, is the router's answer now — not a query string read
+  // during render. `App` gives this component nothing but primitives.
+  const fixture = bundle ? bundleOf(bundle) : null
   const load: Load =
     fetched && fetched.id === worldId
       ? fetched.value
       : worldId
         ? { status: 'loading' }
-        : walksFixture
-          ? // The fixture ships its own graph and gauntlet, so the offline demo
-            // opens all three gates.
-            // The bundled fixture has no server behind it, so no class either.
-            { status: 'ready', game: fixtureQuest, gauntlet: fixtureGauntlet, graph: fixtureGraph, serverId: null }
-          : { status: 'picker' }
+        : // The bundle ships its own graph and gauntlet, so the offline world
+          // opens all three gates. It has no server behind it, so no class.
+          { status: 'ready', game: fixture!.quest, gauntlet: fixture!.gauntlet, graph: fixture!.graph, serverId: null }
 
   const [stored, setStored] = useState<Session>(() => freshSession(worldId))
   const session = stored.key === worldId ? stored : freshSession(worldId)
   const { completed, correct, explained, read, xp } = session
   const [openPortal, setOpenPortal] = useState<PortalKind | null>(null)
+  /** Bumped by "Try again": re-runs the fetch without discarding history. */
+  const [attempt, setAttempt] = useState(0)
 
   /** Patch the session, discarding whatever belonged to a world we left. */
   const updateSession = useCallback(
@@ -328,12 +337,23 @@ export function WorldExperience({ worldId }: WorldExperienceProps) {
     return () => {
       cancelled = true
     }
-  }, [worldId, updateSession])
+  }, [worldId, updateSession, attempt])
 
   const game = load.status === 'ready' ? load.game : null
   const gauntlet = load.status === 'ready' ? load.gauntlet : null
   const graph = load.status === 'ready' ? load.graph : null
   const serverId = load.status === 'ready' ? load.serverId : null
+
+  /**
+   * Where "leave" goes: the server this world belongs to. It used to be the
+   * cross-server picker, which was itself a dead end — you left a world onto a
+   * screen with no way home.
+   *
+   * `WorldDetail.server_id` is always set, so the fallback is only ever the
+   * bundled world. That one is walkable signed out, and `/` is the sign-in
+   * screen then and the server hub afterwards — one href, right either way.
+   */
+  const leaveHref = serverId ? hrefFor({ name: 'server', serverId }) : '/'
 
   /**
    * What the rest of the class did. One cached read, never polled: server-side
@@ -464,6 +484,7 @@ export function WorldExperience({ worldId }: WorldExperienceProps) {
   }, [map, openPortal])
 
   const player = usePlayer(map, { enabled: openPortal === null })
+  const coarse = useCoarsePointer()
 
   /**
    * A hotspot, not a single tile: at 5.4 tiles/s a one-tile target is genuinely
@@ -627,8 +648,8 @@ export function WorldExperience({ worldId }: WorldExperienceProps) {
    * door, not a summary.
    */
   const leave = useCallback(() => {
-    window.location.href = LEAVE_HREF
-  }, [])
+    navigate(leaveHref)
+  }, [leaveHref])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -667,14 +688,14 @@ export function WorldExperience({ worldId }: WorldExperienceProps) {
       return (
         <Notice tone="error" eyebrow="World unavailable" title="This quest could not be laid out.">
           <p className="mt-3 text-ink-muted">{world.error}</p>
-          <button className="button-primary mt-6" onClick={() => window.location.reload()}>
-            Try again
-          </button>
+          <div className="mt-6 flex flex-wrap gap-3">
+            {/* A reload cannot fix a layout throw on content already in hand,
+                so the honest second option is the way out, not a retry. */}
+            <BackLink to={leaveHref} variant="button">Leave this world</BackLink>
+          </div>
         </Notice>
       )
     }
-
-    if (load.status === 'picker') return <WorldPicker />
 
     if (load.status === 'loading') {
       return (
@@ -684,6 +705,11 @@ export function WorldExperience({ worldId }: WorldExperienceProps) {
               CQ
             </span>
             <p className="mt-4 text-sm font-semibold text-ink-muted">Loading your world…</p>
+            {/* A request that hangs used to park the learner here with no way
+                out at all. */}
+            <div className="mt-6 flex justify-center">
+              <BackLink to="/">Your servers</BackLink>
+            </div>
           </div>
         </main>
       )
@@ -713,12 +739,12 @@ export function WorldExperience({ worldId }: WorldExperienceProps) {
                 Sign in
               </a>
             ) : (
-              <button className="button-primary" onClick={() => window.location.reload()}>
+              <button className="button-primary" onClick={() => setAttempt((n) => n + 1)}>
                 Try again
               </button>
             )}
             <a className="button-secondary" href={FIXTURE_HREF}>
-              Walk the demo world
+              Walk a bundled world
             </a>
           </div>
         </Notice>
@@ -734,7 +760,7 @@ export function WorldExperience({ worldId }: WorldExperienceProps) {
   const clearedCount = gates.filter((portal) => cleared.has(portal.kind)).length
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-background">
+    <div className="relative h-dvh w-full overflow-hidden bg-background">
       <WorldCanvas map={map} player={player.body} cleared={cleared} activePortal={portalHere?.kind ?? null} />
 
       {/* HUD. Hidden while a portal is open: the novel shell carries its own
@@ -768,8 +794,8 @@ export function WorldExperience({ worldId }: WorldExperienceProps) {
                 to see it without hunting, so it sits in the card everyone is
                 already reading and carries its own keyboard hint. */}
             <a
-              className="ml-auto flex items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-xs font-black text-ink-muted transition hover:border-white/40 hover:bg-white/10 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-              href={LEAVE_HREF}
+              className="ml-auto flex min-h-11 touch-manipulation items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-xs font-black text-ink-muted transition hover:border-white/40 hover:bg-white/10 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              href={leaveHref}
             >
               <span aria-hidden="true">←</span>
               Leave world
@@ -824,18 +850,32 @@ export function WorldExperience({ worldId }: WorldExperienceProps) {
         {/* Full height, with the trail pushed to the bottom: the top-right
             corner is where the third gate stands, and a panel parked there hid
             it completely. */}
-        <div className="flex w-72 max-w-[45vw] flex-col items-end gap-3 self-stretch">
-          <div className="pointer-events-auto hidden rounded-2xl border border-white/10 bg-background/70 px-4 py-3 text-right text-xs font-semibold text-ink-muted backdrop-blur sm:block">
-            <p>
-              <kbd className="font-mono text-ink">WASD</kbd> / <kbd className="font-mono text-ink">arrows</kbd> to walk
-            </p>
-            <p className="mt-1">
-              <kbd className="font-mono text-ink">E</kbd> to enter a portal ·{' '}
-              <kbd className="font-mono text-ink">Esc</kbd> to close it
-            </p>
-            <p className="mt-1">
-              <kbd className="font-mono text-ink">Esc</kbd> out on the map to leave the world
-            </p>
+        {/* `hidden sm:flex`, not `sm:block` on the children alone: below `sm`
+            both children are hidden but the column still claimed its width,
+            crushing the HUD card into a tower on a 390px screen. */}
+        <div className="hidden w-72 max-w-[45vw] flex-col items-end gap-3 self-stretch sm:flex">
+          {/* Gated on the pointer, not on a breakpoint: `sm:` is a width
+              query, so a tablet in portrait used to be told to press WASD. */}
+          <div className="pointer-events-auto rounded-2xl border border-white/10 bg-background/70 px-4 py-3 text-right text-xs font-semibold text-ink-muted backdrop-blur">
+            {coarse ? (
+              <>
+                <p>Drag anywhere on the left to walk</p>
+                <p className="mt-1">Tap a gate, or the round button, to enter it</p>
+              </>
+            ) : (
+              <>
+                <p>
+                  <kbd className="font-mono text-ink">WASD</kbd> / <kbd className="font-mono text-ink">arrows</kbd> to walk
+                </p>
+                <p className="mt-1">
+                  <kbd className="font-mono text-ink">E</kbd> to enter a portal ·{' '}
+                  <kbd className="font-mono text-ink">Esc</kbd> to close it
+                </p>
+                <p className="mt-1">
+                  <kbd className="font-mono text-ink">Esc</kbd> out on the map to leave the world
+                </p>
+              </>
+            )}
           </div>
           {trail.length > 0 && (
             <div className="pointer-events-auto mt-auto hidden w-full md:block">
@@ -849,28 +889,32 @@ export function WorldExperience({ worldId }: WorldExperienceProps) {
         </div>
       </div>
 
-      {/* Walk-up prompt */}
+      {/* Walk-up prompt. On a coarse pointer it moves out of the bottom
+          centre, which is where the thumbstick lives — and once the pill is a
+          button it would happily eat a press meant for walking. */}
       {portalHere && !openPortal && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-8 flex justify-center px-4">
-          <div
-            className="stage-enter pointer-events-auto flex items-center gap-3 rounded-full border bg-background/85 px-5 py-3 shadow-2xl shadow-black/40 backdrop-blur"
-            style={{ borderColor: portalArt(portalHere.kind).glow }}
-          >
-            {/* A locked gate advertises no key: the prompt explains what is
-                behind the door without promising it opens. */}
-            {!portalHere.locked && (
-              <kbd className="rounded-lg border border-primary/50 bg-primary/15 px-2 py-1 font-mono text-sm font-black text-primary-soft">
-                E
-              </kbd>
-            )}
-            <span className="text-sm font-bold text-ink">
-              {portalHere.locked
-                ? portalHere.label
-                : `${cleared.has(portalHere.kind) ? 'Re-enter' : 'Enter'} ${portalHere.label}`}
-            </span>
-            <span className="text-xs font-semibold text-ink-muted">{portalHere.blurb}</span>
-          </div>
+        <div
+          className={`pointer-events-none absolute inset-x-0 flex px-4 ${
+            coarse ? 'bottom-48 justify-end pl-[52%]' : 'bottom-8 justify-center'
+          }`}
+        >
+          <PortalPrompt
+            portal={portalHere}
+            cleared={cleared.has(portalHere.kind)}
+            coarse={coarse}
+            onEnter={() => setOpenPortal(portalHere.kind)}
+          />
         </div>
+      )}
+
+      {/* The mobile control layer: the three things that were keyboard-only. */}
+      {coarse && (
+        <TouchControls
+          onVector={player.setAnalog}
+          portal={portalHere}
+          onEnter={() => portalHere && setOpenPortal(portalHere.kind)}
+          enabled={openPortal === null}
+        />
       )}
 
       {/* A portal is not a dialog. Each body renders its own novel shell over
@@ -1022,5 +1066,57 @@ export function ScenePanel({
       onCommit={onCommit}
       onContinue={() => onStage('diagnosis')}
     />
+  )
+}
+
+/**
+ * The pill that appears when the player is standing at a gate.
+ *
+ * It is a button when the gate opens and a plain div when it does not: a
+ * control that looks pressable and does nothing is a lie. Making it pressable
+ * also fixes the mouse, which until now had no clickable way into a gate — the
+ * only way in was the E key.
+ */
+function PortalPrompt({
+  portal,
+  cleared,
+  coarse,
+  onEnter,
+}: {
+  portal: PortalNode
+  cleared: boolean
+  coarse: boolean
+  onEnter: () => void
+}) {
+  const body = (
+    <>
+      {/* A locked gate advertises no key, and on touch there is no key to
+          advertise either — the action button carries that. */}
+      {!portal.locked && !coarse && (
+        <kbd className="rounded-lg border border-primary/50 bg-primary/15 px-2 py-1 font-mono text-sm font-black text-primary-soft">
+          E
+        </kbd>
+      )}
+      <span className="text-sm font-bold text-ink">
+        {portal.locked ? portal.label : `${cleared ? 'Re-enter' : 'Enter'} ${portal.label}`}
+      </span>
+      <span className="hidden text-xs font-semibold text-ink-muted sm:inline">{portal.blurb}</span>
+    </>
+  )
+  const shell =
+    'stage-enter pointer-events-auto flex min-h-12 touch-manipulation items-center gap-3 rounded-full border bg-background/85 px-5 py-3 shadow-2xl shadow-black/40 backdrop-blur'
+  const style = { borderColor: portalArt(portal.kind).glow }
+
+  if (portal.locked) {
+    return (
+      <div className={shell} style={style}>
+        {body}
+      </div>
+    )
+  }
+  return (
+    <button type="button" className={shell} style={style} onClick={onEnter}>
+      {body}
+    </button>
   )
 }

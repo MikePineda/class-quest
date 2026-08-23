@@ -19,6 +19,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import { guideTileFor } from './hubgen'
+import { clampCamera, MIN_SCALE, pickScale } from './camera'
 import { FLOOR, TILE, WALL, tileAt } from './types'
 import type { Anim, Biome, PortalKind, PortalNode, SceneNode, Still, WorldMap } from './types'
 import type { PlayerBody } from './usePlayer'
@@ -29,11 +30,6 @@ import { CHART_BOX, drawChartFrame as plotChartFrame } from './vn/chartFrameArt'
 /** The learner walks the world as the explorer; the other actors stand at their scenes. */
 const PLAYER_ACTOR = 'explorer'
 
-/** Roughly how many tiles we want across the viewport before picking the integer scale. */
-const TARGET_TILES_ACROSS = 26
-const TARGET_TILES_DOWN = 15
-const MIN_SCALE = 2
-const MAX_SCALE = 6
 
 /** Where props stand relative to the actor they belong to, in tiles. */
 const PROP_OFFSETS = [
@@ -237,24 +233,7 @@ function buildRoomIndex(map: WorldMap): Int16Array {
   return index
 }
 
-const clampCamera = (value: number, view: number, world: number): number =>
-  world <= view ? (world - view) / 2 : Math.min(Math.max(value, 0), world - view)
 
-/**
- * The integer zoom. Start from how many tiles we want on screen, then zoom in
- * far enough that the map covers the viewport if it can: a short map letterboxed
- * against black reads as a bug, not as a camera clamp.
- */
-function pickScale(width: number, height: number, map: WorldMap): number {
-  const preferred = Math.floor(
-    Math.min(width / (TILE * TARGET_TILES_ACROSS), height / (TILE * TARGET_TILES_DOWN)),
-  )
-  const cover = Math.ceil(
-    Math.max(width / (map.width * TILE), height / (map.height * TILE)),
-  )
-  const scale = Math.max(preferred || MIN_SCALE, cover)
-  return Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale))
-}
 
 /**
  * `DecorPlacement.sprite` keys into the biome's decor list. Accept both an index
@@ -321,7 +300,7 @@ export function WorldCanvas({ map, player, cleared, activePortal }: WorldCanvasP
       const height = Math.max(1, Math.floor(rect.height))
       view.width = width
       view.height = height
-      view.scale = pickScale(width, height, map)
+      view.scale = pickScale(width, height, map.width, map.height)
       // The backing store stays in CSS pixels; `image-rendering: pixelated`
       // handles the device-pixel-ratio step, which is itself a whole number.
       canvas.width = width
@@ -857,12 +836,19 @@ export function WorldCanvas({ map, player, cleared, activePortal }: WorldCanvasP
     }
   }, [map, images, player, roomIndex, biomes])
 
+  // `touch-none` belongs on this wrapper and not on the world root: the portal
+  // panels are siblings of it, not descendants, so their `overflow-y-auto`
+  // keeps scrolling normally while a drag on the world steers the player
+  // instead of panning the page.
   return (
-    <div ref={wrapperRef} className="absolute inset-0 overflow-hidden bg-[#05080f]">
+    <div
+      ref={wrapperRef}
+      className="absolute inset-0 touch-none select-none overflow-hidden overscroll-none bg-[#05080f] [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none]"
+    >
       <canvas
         ref={canvasRef}
         role="img"
-        aria-label={`${map.title}: a pixel-art world with ${map.portals.length} gates and ${map.nodes.length} scenes. Walk with the arrow keys or WASD.`}
+        aria-label={`${map.title}: a pixel-art world with ${map.portals.length} gates and ${map.nodes.length} scenes. Walk with the arrow keys, WASD, or the on-screen stick.`}
         className="block h-full w-full [image-rendering:pixelated]"
       />
       {!images && (

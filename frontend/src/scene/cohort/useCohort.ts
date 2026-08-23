@@ -38,8 +38,10 @@ interface Entry {
 
 /**
  * Module-level, so two panels open in one session make one request, and closing
- * and reopening a portal makes none. Cleared only by a page load, which is the
- * right lifetime for a demo.
+ * and reopening a portal makes none. Nothing clears it: since the router
+ * arrived there are no page loads left in a session, so a snapshot can be as
+ * stale as the session is long. Bounded by `CACHE_MS` on the next `refresh()`,
+ * and it is a garnish either way -- but do not read it as fresh.
  */
 const cache = new Map<string, Entry>()
 /** Server ids whose last read failed, so a null stops reading as "still loading". */

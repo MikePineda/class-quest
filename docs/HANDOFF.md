@@ -8,6 +8,9 @@ not assumed. Read `docs/OPERATIONS.md` for deploy and `CONTRACTS.md` for the API
 The player stands in the middle of a cavern hub. Three portals lead into three ways of
 learning the same course, plus a fourth that renders sealed.
 
+Two hand-written worlds ship compiled into the page (Python basics, overfitting), so the
+app is walkable with no account and no API — that is what the login screen offers.
+
 | Portal | Reads | Server-backed? |
 |---|---|---|
 | 📖 Storybook | `CourseGraph.concepts[]` | no — read receipts are local only |
@@ -27,13 +30,16 @@ cd backend && .venv/bin/uvicorn app.main:app --reload   # :8000, seeds a demo wo
 cd frontend && npm run dev                              # :5173, proxies /api -> :8000
 ```
 
-Login `demo@classquest.app` / `demo1234`. The seeded world has a quest, a gauntlet and a
-graph — enough to exercise all three portals. `frontend/.env.bak` holds the previous
-value; flip back to `https://api.classquest.net` to see real generated ML worlds, but the
-chat portal will 404 there until this is deployed.
+Login `demo@classquest.app` / `demo1234`. Two servers are seeded, one `ready` world each:
+Programming Fundamentals (`PY101A`) and Intro to ML (`DEMO01`). Both have a quest, a
+gauntlet and a graph — enough to exercise all three portals — and both have a ten-strong
+cohort so the leaderboards are not empty. `frontend/.env.bak` holds the previous proxy
+value; flip back to `https://api.classquest.net` to see real generated worlds.
 
-The fixture route `/world?demo=1` has **no world id**, so the Explain portal cannot post
-there and says so. Use a real world id to test the chat.
+The bundled routes `/world?demo=pybasics` and `/world?demo=overfitting` need no account
+and no API, and the login screen's "Walk the demo world" opens the first of them. They
+have **no world id**, so the Explain portal cannot post there and says so. Use a real
+world id to test the chat.
 
 ## Known open items
 
@@ -53,16 +59,38 @@ Nothing here is broken; these are the things deliberately left.
 4. **The boss bar was cut.** Design decided: derive it read-only from `GET /servers/{id}/cohort`,
    which already returns per-scene distributions — zero backend work — and **never** let it
    gate anyone's progress.
-5. **`worldgen.ts` and `worldgen.test.ts` are dead.** Kept green on purpose so CI never went
+5. **The scripted `/demo` encounter is no longer the login CTA.** It is still routed and
+   still works, but nothing prominent links to it — the button that used to promised a
+   world and delivered a reducer. Decide whether it earns its keep.
+6. **`worldgen.ts` and `worldgen.test.ts` are dead.** Kept green on purpose so CI never went
    red mid-redesign. Deleting them is a five-minute cleanup; `WorldCanvas` also still has the
    scene-node marker path, inert with `nodes: []`.
-6. **Two lint warnings** in `SceneStages.tsx` (`react(only-export-components)`) because
+7. **Two lint warnings** in `SceneStages.tsx` (`react(only-export-components)`) because
    `humanise` and `filled` live beside components. Moving them to a helper module clears it.
-7. **`Room.chapterId` / `Room.title`** are named after chapters and a hub has none. Renaming
+8. **`Room.chapterId` / `Room.title`** are named after chapters and a hub has none. Renaming
    costs a three-file sweep and was not worth it mid-build.
 
 ## Traps that already cost time — do not rediscover them
 
+- **There is a router now, and `WorldExperience` needs `key={worldId}`.**
+  `openPortal` and `committing` are the only pieces of world state not keyed by
+  world id. Without the remount, leaving world A with the quiz open lands the
+  learner *inside world B's quiz*, having never seen its map. Full page loads
+  used to hide this completely.
+- **The click interceptor must select `'a'`, never `'[href]'`.** React 19 hoists
+  `<style href=…>` out of the components that declare them, and the novel shell
+  uses that — so `[href]` matches stylesheets.
+- **`useSyncExternalStore`'s `getSnapshot` must return a cached object.** A fresh
+  literal per call is an infinite render loop. `nav/router.ts` rebuilds `current`
+  only inside `emit`.
+- **Never set a transform in the style prop and also write it imperatively.** The
+  thumbstick knob did both, and since the world re-renders on every tile change,
+  React reapplied the prop and snapped the knob back to centre mid-drag. The
+  handler is the only owner; a fresh gesture mounts a fresh knob.
+- **`pollServer` swallows five consecutive failures before reporting.** Never use
+  it for the opening fetch on a screen that can 403 or 404 — it sits on
+  "Loading…" for ten seconds and then calls a permission error a network blip.
+  `ServerScreen` does one plain `getServer` first and only then hands off.
 - **`portalSpecs` must stay memoised.** A fresh array literal makes a new `WorldMap` every
   render, which resets the player to spawn (looks like "movement is broken") *and* keeps the
   canvas preload from ever settling (looks like "the world never loads"). Neither symptom
@@ -119,3 +147,38 @@ Test against a real generated world, not only `fixtures/`.
   on the wire. Worth deciding deliberately rather than inheriting.
 - **`WorldSummary.my_completion` counts scenes *attempted*, not answered correctly.** Anything
   built on it must say "walked", never "mastered". Mastery is `best_correct`.
+
+## Mobile
+
+The world is playable on a phone. Three things were keyboard-only — walking,
+opening a gate and leaving — and every panel behind a gate was already tappable,
+because its choices, page turns and close button are real buttons.
+
+- **`frontend/src/scene/input.ts` is pure and has a golden test.** It asserts the
+  new vector maths is bit-identical to the pre-joystick expression across all 256
+  combinations of the eight movement keys. Touch was only ever allowed to be free.
+  If you change movement, that test is the contract.
+- **`resolveIntent` divides by `max(1, hypot)`.** For keys that *is* `hypot` —
+  they are sums of -1, 0 and 1, so the length is never below 1. For an analog
+  vector shorter than 1 it divides by 1, which is what makes a small tilt a slow
+  walk. Key plus stick saturates at 1, so touch cannot outrun the keyboard.
+- **The analog ref must be zeroed in four places**: map change, blur, portal open,
+  unmount. Each is a way a gesture can end without a pointerup. Miss one and the
+  player walks into a wall forever.
+- **`pickScale` is floored at fourteen tiles across** (`scene/camera.ts`). Before
+  that, covering the map could overrule the framing and a 412x915 phone showed
+  6.4 tiles of a 28-tile room with both gates off screen. Portrait letterboxes
+  instead; the band is the same `#05080f` the vignette already fades the edges
+  to, so it reads as the cave going dark. Desktop scales are pinned as literals
+  in `camera.test.ts` — 1280x720 is 3, 1920x1080 is 5, 2560x1440 is 6.
+- **Do not make the hub size depend on the viewport.** `usePlayer` and
+  `WorldCanvas`'s preload are both keyed on `map` identity, so it would reset the
+  player to spawn and re-run the preloader on every rotation.
+- **`touch-action: none` belongs on the `WorldCanvas` wrapper, not the world
+  root.** The portal panels are siblings of that wrapper, not descendants, so
+  they keep scrolling normally.
+- **`100vh` is the *large* viewport on iOS.** With the toolbar showing, the
+  document is taller than the screen and every drag on the canvas scrolls the
+  page instead of steering. `dvh` on `body` and on the world root.
+- **Gate hints on `useCoarsePointer()`, never a breakpoint.** `sm:` is a width
+  query, so a tablet in portrait used to be told to press WASD.

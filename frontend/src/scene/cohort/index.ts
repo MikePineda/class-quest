@@ -9,6 +9,8 @@
  * - `useCohort` — one shared, cached, non-polling read of the payload.
  * - `CohortEcho` — how the class answered one question, after the learner commits.
  * - `WorldClosurePanel` — the fourth portal: what the run was worth, and the way out.
+ * - `CohortChallenge` — the question the class found hardest, offered as a rematch.
+ * - `BoardLine` — one row of the standings, shared with the server screen.
  * - `cohortStats` — the pure derivations, including every refusal to speak on
  *   thin data. Test that, not the components.
  */
@@ -21,6 +23,8 @@ export type { WorldClosurePanelProps } from './WorldClosurePanel'
 
 export { CohortChallenge } from './CohortChallengePanel'
 export type { CohortChallengeProps } from './CohortChallengePanel'
+
+export { BoardLine } from './BoardLine'
 
 export { CACHE_MS, useCohort } from './useCohort'
 export type { CohortState } from './useCohort'

@@ -2,7 +2,9 @@ import { useState, type FormEvent } from 'react'
 import { api } from '../api/client'
 import type { TokenOut } from '../api/types'
 import { readableError } from './errors'
+import { checkPassword, MIN_LENGTH } from './password'
 import { Brand } from './Brand'
+import { FIXTURE_HREF } from '../nav/routes'
 
 interface AuthScreenProps {
   onAuthenticated: (session: TokenOut) => void
@@ -15,6 +17,12 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const registering = mode === 'register'
+  // Advisory only. The backend refuses the registration; this just means the
+  // person is not told about it after a round trip. See `password.ts`.
+  const check = checkPassword(password, { email, displayName })
+  const showProblems = registering && password.length > 0 && !check.ok
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -70,15 +78,38 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
               <Field label="Display name" name="display-name" value={displayName} onChange={setDisplayName} autoComplete="name" required />
             )}
             <Field label="Email address" name="email" type="email" value={email} onChange={setEmail} autoComplete="email" required />
-            <Field label="Password" name="password" type="password" value={password} onChange={setPassword} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} minLength={8} required />
+            <Field label="Password" name="password" type="password" value={password} onChange={setPassword} autoComplete={registering ? 'new-password' : 'current-password'} minLength={registering ? MIN_LENGTH : undefined} required describedBy={registering ? 'password-help' : undefined} />
+            {registering && (
+              <div id="password-help" className="-mt-2" aria-live="polite">
+                {showProblems ? (
+                  <ul className="space-y-1">
+                    {check.problems.map((problem) => (
+                      <li key={problem} className="flex gap-2 text-xs text-error">
+                        <span aria-hidden="true">•</span>
+                        <span>{problem}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className={`text-xs ${check.ok && password ? 'text-secondary' : 'text-ink-muted'}`}>
+                    {check.ok && password
+                      ? 'Good — that is hard to guess.'
+                      : `At least ${MIN_LENGTH} characters. A few ordinary words beat one clever word.`}
+                  </p>
+                )}
+              </div>
+            )}
 
-            <button className="button-primary w-full" type="submit" disabled={busy}>
+            <button className="button-primary w-full" type="submit" disabled={busy || (registering && !check.ok)}>
               {busy ? 'Opening portal…' : mode === 'login' ? 'Enter the world →' : 'Create account →'}
             </button>
           </form>
 
           <div className="my-6 flex items-center gap-4" aria-hidden="true"><span className="h-px flex-1 bg-white/10" /><span className="font-hud text-xs text-ink-muted">OR</span><span className="h-px flex-1 bg-white/10" /></div>
-          <a className="button-secondary w-full" href="/demo">Walk the demo world</a>
+          {/* A world you can actually walk, not the scripted encounter at
+              /demo: the label promised one and delivered the other. Bundled,
+              so it needs no account and no network. */}
+          <a className="button-secondary w-full" href={FIXTURE_HREF}>Walk the demo world</a>
 
           <p className="mt-6 text-center text-sm text-ink-muted">
             {mode === 'login' ? 'New to ClassQuest?' : 'Already have an account?'}{' '}
@@ -92,11 +123,11 @@ export function AuthScreen({ onAuthenticated }: AuthScreenProps) {
   )
 }
 
-function Field({ label, name, type = 'text', value, onChange, ...props }: { label: string; name: string; type?: string; value: string; onChange: (value: string) => void; autoComplete?: string; minLength?: number; required?: boolean }) {
+function Field({ label, name, type = 'text', value, onChange, describedBy, ...props }: { label: string; name: string; type?: string; value: string; onChange: (value: string) => void; autoComplete?: string; minLength?: number; required?: boolean; describedBy?: string }) {
   return (
     <label className="block" htmlFor={name}>
       <span className="mb-2 block text-sm font-bold text-ink">{label}</span>
-      <input id={name} name={name} type={type} value={value} onChange={(event) => onChange(event.target.value)} className="field" {...props} />
+      <input id={name} name={name} type={type} value={value} onChange={(event) => onChange(event.target.value)} className="field" aria-describedby={describedBy} {...props} />
     </label>
   )
 }

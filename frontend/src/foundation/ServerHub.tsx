@@ -7,11 +7,10 @@ import { CohortStatusCard } from './CohortStatusCard'
 
 interface ServerHubProps {
   user: User
-  onEditProfile: () => void
   onSignOut: () => void
 }
 
-export function ServerHub({ user, onEditProfile, onSignOut }: ServerHubProps) {
+export function ServerHub({ user, onSignOut }: ServerHubProps) {
   const [servers, setServers] = useState<ServerSummary[]>([])
   const [tab, setTab] = useState<'create' | 'join'>('create')
   const [loading, setLoading] = useState(true)
@@ -49,7 +48,7 @@ export function ServerHub({ user, onEditProfile, onSignOut }: ServerHubProps) {
       <header className="border-b border-white/10 bg-background-raised/90 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
           <Brand compact subtitle="Server hub" />
-          <div className="flex items-center gap-3"><button type="button" className="hidden text-sm font-semibold text-ink-muted hover:text-ink sm:block" onClick={onEditProfile}>{user.display_name}</button><button type="button" className="rounded-lg border border-white/10 px-3 py-2 text-sm font-bold text-ink-muted hover:border-white/25 hover:text-ink" onClick={onSignOut}>Sign out</button></div>
+          <div className="flex items-center gap-3"><a className="hidden text-sm font-semibold text-ink-muted hover:text-ink sm:block" href="/profile">{user.display_name}</a><button type="button" className="rounded-lg border border-white/10 px-3 py-2 text-sm font-bold text-ink-muted hover:border-white/25 hover:text-ink" onClick={onSignOut}>Sign out</button></div>
         </div>
       </header>
 
@@ -187,7 +186,7 @@ function JoinServerForm({ onJoined }: { onJoined: (server: ServerSummary) => voi
 function ServerCard({ server }: { server: ServerSummary }) {
   const statusColor = server.status === 'ready' ? 'text-secondary' : server.status === 'failed' ? 'text-error' : 'text-primary-soft'
   return (
-    <a className="block rounded-lg border border-white/10 bg-surface-high/70 p-4 transition hover:border-white/20 hover:bg-surface-highest/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-offset-2 focus-visible:ring-offset-background" href="/world">
+    <a className="block rounded-lg border border-white/10 bg-surface-high/70 p-4 transition hover:border-white/20 hover:bg-surface-highest/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-offset-2 focus-visible:ring-offset-background" href={`/servers/${server.id}`}>
       <div className="flex items-start justify-between gap-3"><div><h3 className="font-bold text-ink">{server.name}</h3><p className="mt-1 line-clamp-2 text-sm text-ink-muted">{server.description || `${server.pet} guide · ${server.member_count} member${server.member_count === 1 ? '' : 's'}`}</p></div><span className={`text-xs font-extrabold uppercase tracking-[0.12em] ${statusColor}`}>{server.status}</span></div>
       <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-ink-muted"><span>{server.world_count} world{server.world_count === 1 ? '' : 's'}</span>{server.join_code && <><span aria-hidden="true">·</span><span>Code <strong className="font-hud text-[10px] tracking-[0.08em] text-ink">{server.join_code}</strong></span></>}</div>
       {server.error && <p className="mt-3 text-xs text-error">{server.error}</p>}

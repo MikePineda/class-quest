@@ -1,0 +1,185 @@
+{
+  "schema_version": "1.0",
+  "game_id": "pyq1w4k7",
+  "graph_id": "pyb1as1c",
+  "archetype": "quest",
+  "title": "The Naming of Things",
+  "chapters": [
+    {
+      "id": "ch_names",
+      "title": "The Naming of Things",
+      "concept_ids": ["variables"],
+      "background": "village",
+      "scenes": [
+        {
+          "id": "sc_names_intro",
+          "type": "dialogue",
+          "speaker": "mentor_owl",
+          "props": ["signpost"],
+          "lines": [
+            "Every crate in this village wears a label, and every label can be peeled off and stuck on another crate.",
+            "That is all a variable is. The name is the label. The crate is the value.",
+            "So when someone tells you count = count + 1, they are not claiming a thing equals itself plus one.",
+            "They are saying: look in the crate, add one, and move the label to what you got."
+          ]
+        },
+        {
+          "id": "sc_names_rebind",
+          "type": "prediction",
+          "concept_id": "variables",
+          "props": ["chest"],
+          "prompt": "a = 3, then b = a, then a = 10. What is b now?",
+          "options": [
+            { "id": "o_three", "text": "3", "correct": true },
+            { "id": "o_ten", "text": "10, because b follows a", "correct": false, "misconception_id": "names_stay_linked" },
+            { "id": "o_error", "text": "An error — a was already used", "correct": false, "misconception_id": "equals_is_equality" }
+          ],
+          "reveal": "b is 3. The line b = a happened once and copied what a held at that moment. Rebinding a afterwards moves only a's label."
+        },
+        {
+          "id": "sc_names_equals",
+          "type": "prediction",
+          "concept_id": "variables",
+          "prompt": "Which line asks Python whether two things are the same, rather than telling it to bind a name?",
+          "options": [
+            { "id": "o_double", "text": "if x == 5:", "correct": true },
+            { "id": "o_single", "text": "if x = 5:", "correct": false, "misconception_id": "equals_is_equality" },
+            { "id": "o_arrow", "text": "if x := 5:", "correct": false, "misconception_id": "equals_is_equality" }
+          ],
+          "reveal": "== asks. = tells. Python refuses to run a file containing if x = 5, which is a kindness — the question was never asked."
+        }
+      ]
+    },
+    {
+      "id": "ch_types",
+      "title": "Two Doors, One Word",
+      "concept_ids": ["data_types"],
+      "background": "ruins",
+      "scenes": [
+        {
+          "id": "sc_types_intro",
+          "type": "dialogue",
+          "speaker": "mentor_owl",
+          "props": ["doorway_pair"],
+          "lines": [
+            "Two doors, both carved with a plus sign. They do not do the same thing.",
+            "Give the left door two numbers and it adds them. Give the right door two pieces of text and it joins them.",
+            "The doors decide by looking at what you are carrying, not at what you meant.",
+            "Carry one of each, and neither door will open for you."
+          ]
+        },
+        {
+          "id": "sc_types_mix",
+          "type": "prediction",
+          "concept_id": "data_types",
+          "props": ["doorway_pair"],
+          "prompt": "What does \"5\" + 5 produce?",
+          "options": [
+            { "id": "o_typeerror", "text": "A TypeError", "correct": true },
+            { "id": "o_ten", "text": "10", "correct": false, "misconception_id": "quotes_are_cosmetic" },
+            { "id": "o_fiftyfive", "text": "\"55\"", "correct": false, "misconception_id": "quotes_are_cosmetic" }
+          ],
+          "reveal": "A TypeError. Python will not decide for you whether plus means arithmetic or joining, so it stops and says so. int(\"5\") + 5 is 10; \"5\" + str(5) is \"55\". You choose."
+        },
+        {
+          "id": "sc_types_input",
+          "type": "prediction",
+          "concept_id": "data_types",
+          "prompt": "The user types 7 at age = input(\"Age? \"). What is in age?",
+          "options": [
+            { "id": "o_str", "text": "The string \"7\"", "correct": true },
+            { "id": "o_int", "text": "The integer 7, because they typed digits", "correct": false, "misconception_id": "input_returns_a_number" },
+            { "id": "o_depends", "text": "Whichever the next line needs", "correct": false, "misconception_id": "input_returns_a_number" }
+          ],
+          "reveal": "The string \"7\". input always hands back text, whatever was typed. age + 1 fails here; int(age) + 1 does not."
+        }
+      ]
+    },
+    {
+      "id": "ch_print",
+      "title": "The Lantern That Only Shines",
+      "concept_ids": ["print_output"],
+      "background": "cavern",
+      "scenes": [
+        {
+          "id": "sc_print_intro",
+          "type": "dialogue",
+          "speaker": "mentor_owl",
+          "props": ["lantern"],
+          "lines": [
+            "This lantern shows you what is in the room. It does not hand you anything.",
+            "print is that lantern. It puts a value where a person can see it.",
+            "Ask it for the value back and it gives you None, every time, without complaint.",
+            "Seeing a thing and holding a thing are different. Most of week six comes down to this."
+          ]
+        },
+        {
+          "id": "sc_print_returns",
+          "type": "prediction",
+          "concept_id": "print_output",
+          "props": ["lantern"],
+          "prompt": "After result = print(\"hello\"), what is in result?",
+          "options": [
+            { "id": "o_none", "text": "None", "correct": true },
+            { "id": "o_hello", "text": "\"hello\"", "correct": false, "misconception_id": "print_returns_the_value" },
+            { "id": "o_nothing", "text": "Nothing — the line is invalid", "correct": false, "misconception_id": "print_returns_the_value" }
+          ],
+          "reveal": "None. The word hello appeared on the screen as a side effect, and print handed back None. That is why a function which prints its answer has no answer anyone else can use."
+        }
+      ]
+    },
+    {
+      "id": "ch_lists",
+      "title": "Counting from the Doorway",
+      "concept_ids": ["lists", "indexing", "for_loops"],
+      "background": "observatory",
+      "scenes": [
+        {
+          "id": "sc_lists_intro",
+          "type": "dialogue",
+          "speaker": "mentor_owl",
+          "props": ["crystal_cluster"],
+          "lines": [
+            "Three crystals on the shelf, left to right. The shelf remembers the order; that is part of what it is.",
+            "But the surveyor who catalogued this room started at zero, standing in the doorway.",
+            "So the first crystal is number zero, and the third is number two.",
+            "There is no crystal number three, and the room will tell you so loudly."
+          ]
+        },
+        {
+          "id": "sc_lists_index",
+          "type": "prediction",
+          "concept_id": "indexing",
+          "props": ["crystal_cluster"],
+          "prompt": "scores = [90, 85, 100]. What does scores[3] give you?",
+          "options": [
+            { "id": "o_indexerror", "text": "An IndexError", "correct": true },
+            { "id": "o_hundred", "text": "100, the third score", "correct": false, "misconception_id": "index_starts_at_one" },
+            { "id": "o_none2", "text": "None, since nothing is there", "correct": false, "misconception_id": "index_starts_at_one" }
+          ],
+          "reveal": "An IndexError. Valid indexes are 0, 1 and 2 — the last is always one less than the length. scores[2] is 100, and scores[-1] is the same thing counted from the end."
+        },
+        {
+          "id": "sc_lists_walk",
+          "type": "simulation",
+          "concept_id": "for_loops",
+          "widget": "graph_walk",
+          "instruction": "Step the loop through [90, 85, 100] one item at a time and watch what the loop variable is bound to on each pass.",
+          "success_condition": "The learner steps through all three items and sees the name rebound to the value, not to the position."
+        },
+        {
+          "id": "sc_lists_range",
+          "type": "prediction",
+          "concept_id": "for_loops",
+          "prompt": "How many times does the block inside for i in range(3): run, and what is i on the last pass?",
+          "options": [
+            { "id": "o_three_two", "text": "Three times; i is 2 at the end", "correct": true },
+            { "id": "o_three_three", "text": "Three times; i is 3 at the end", "correct": false, "misconception_id": "range_includes_the_end" },
+            { "id": "o_four", "text": "Four times, counting 0 through 3", "correct": false, "misconception_id": "range_includes_the_end" }
+          ],
+          "reveal": "Three times, ending at 2. range stops before the number you give it — the same convention as indexing, which is exactly why range(len(scores)) walks a list's valid indexes."
+        }
+      ]
+    }
+  ]
+}

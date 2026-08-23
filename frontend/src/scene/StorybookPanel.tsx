@@ -35,6 +35,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { BloomLevel, Concept, CourseGraph, Misconception, SourceSpan } from '../api/types'
 import { filled, Insight, SourceQuote } from './SceneStages'
+import { useCoarsePointer } from './useCoarsePointer'
 import { VisualNovelShell } from './vn'
 import { portalArt } from './vocabulary'
 
@@ -85,6 +86,7 @@ const speakable = (mistake: Misconception) =>
   filled(mistake.statement) || filled(mistake.why_plausible) || filled(mistake.correction)
 
 export function StorybookPanel({ graph, readIds, onRead, xp = null, onClose }: StorybookPanelProps) {
+  const coarse = useCoarsePointer()
   const concepts = useMemo(() => graph?.concepts ?? [], [graph])
   const total = concepts.length
   const [index, setIndex] = useState(0)
@@ -198,7 +200,7 @@ export function StorybookPanel({ graph, readIds, onRead, xp = null, onClose }: S
       // The write-up is what the storyteller says. Blank omits the whole band
       // rather than putting an empty speech bubble on the screen.
       dialogue={summary ?? undefined}
-      footerHint="Arrow keys ← and → turn the page."
+      footerHint={coarse ? 'Use Previous and Next to turn the page.' : 'Arrow keys ← and → turn the page.'}
       onClose={onClose}
       closeLabel="Back to the hub"
     >
