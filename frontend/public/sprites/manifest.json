@@ -63,6 +63,11 @@
     "h": 16,
     "w": 16
   },
+  "gear/short_sword.png": {
+    "from": "drawn in scripts/slice_sprites.py",
+    "h": 16,
+    "w": 16
+  },
   "props/chest.png": {
     "from": "Environment/Props/Static/Furniture.png@48,16",
     "h": 32,

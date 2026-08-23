@@ -41,15 +41,23 @@ the same information next to the images (`"from": "Environment/Tilesets/Wall_Til
 Actor sheets are copied whole; the manifest records frame size and frame count instead of a
 rectangle.
 
-Two sprites are **not** from the pack and are the project's own work:
+Three sprites are **not** from the pack and are the project's own work:
 
 | Sprite | Why |
 |---|---|
 | `actors/mentor_owl_idle.png` | The mascot — it has to be ours |
 | `props/signpost.png` | The pack has no signpost |
+| `gear/short_sword.png` | The pack's weapons are drawn for a bigger character |
 
-Both are drawn as 16x16 character pixel maps inside `scripts/slice_sprites.py` (`MENTOR_OWL`,
-`SIGNPOST`) and rendered into a 32x32 frame, so they sit at the pack's actor scale.
+All three are drawn as 16x16 character pixel maps inside `scripts/slice_sprites.py`
+(`MENTOR_OWL`, `SIGNPOST`, `SHORT_SWORD`). The first two are rendered into a 32x32 frame so they
+sit at the pack's actor scale; the sword stays 16x16 because it is a still laid over an actor
+rather than an actor of its own.
+
+The pack does ship weapons, under `Weapons/`, and they are not used: they are drawn for a rig
+roughly twice this character's size, and its shortest sword laid against the explorer reaches
+over his head. Its colours below the blade are sampled from the explorer sheet itself, so the
+sword belongs to the character rather than sitting on top of him.
 
 ## Regenerating the sprites
 
